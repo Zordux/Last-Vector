@@ -5,6 +5,7 @@
 #include "lastvector/upgrade.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 
 namespace lv {
@@ -14,12 +15,36 @@ float length(Vec2 v) { return std::sqrt(v.x * v.x + v.y * v.y); }
 
 constexpr float kPlayerRadius = 10.0f;
 constexpr float kZombieRadius = 10.0f;
-constexpr float kZombieSeparationRadius = 24.0f;
+constexpr float kZombieSeparationRadius = 22.0f;
+constexpr float kSprintSpeedMultiplier = 1.75f;
+constexpr float kMaxSeparationCorrectionPerTick = 4.0f;
 
 Vec2 normalize(Vec2 v) {
     const float l = length(v);
     if (l <= 1e-6f) return {0.0f, 0.0f};
     return {v.x / l, v.y / l};
+}
+
+bool is_finite_vec(Vec2 v) {
+    return std::isfinite(v.x) && std::isfinite(v.y);
+}
+
+Vec2 fallback_normal_for_pair(size_t a, size_t b) {
+    const uint32_t bits = static_cast<uint32_t>((a * 73856093u) ^ (b * 19349663u));
+    const float angle = static_cast<float>(bits % 1024u) * (6.28318530718f / 1024.0f);
+    return {std::cos(angle), std::sin(angle)};
+}
+
+void clamp_position_in_bounds(Vec2& pos, float radius) {
+    pos.x = clamp(pos.x, radius, kArenaWidth - radius);
+    pos.y = clamp(pos.y, radius, kArenaHeight - radius);
+}
+
+void sanitize_position(Vec2& pos, Vec2 fallback, float radius) {
+    if (!is_finite_vec(pos)) {
+        pos = fallback;
+    }
+    clamp_position_in_bounds(pos, radius);
 }
 
 } // namespace
@@ -72,7 +97,7 @@ void Simulator::update_player(const Action& action) {
     const int cardio = state_.upgrades.levels[static_cast<size_t>(UpgradeId::Cardio)];
     p.max_stamina = 100.0f + cardio * 12.0f;
     if (action.sprint && p.stamina > 1.0f) {
-        sprint_mul = 1.55f;
+        sprint_mul = kSprintSpeedMultiplier;
         p.stamina = std::max(0.0f, p.stamina - (22.0f - cardio * 2.0f) * kFixedDt);
     } else {
         p.stamina = std::min(p.max_stamina, p.stamina + (14.0f + cardio * 2.5f) * kFixedDt);
@@ -82,7 +107,7 @@ void Simulator::update_player(const Action& action) {
     const float wl = length(wish);
     if (wl > 1.0f) wish = {wish.x / wl, wish.y / wl};
 
-    const float accel = 900.0f * sprint_mul;
+    const float accel = 930.0f * sprint_mul;
     const float friction = 7.5f;
     p.vel.x += wish.x * accel * kFixedDt;
     p.vel.y += wish.y * accel * kFixedDt;
@@ -94,8 +119,7 @@ void Simulator::update_player(const Action& action) {
     for (const auto& obstacle : state_.obstacles) {
         circle_vs_aabb_resolve(p.pos, kPlayerRadius, obstacle);
     }
-    p.pos.x = clamp(p.pos.x, 0.0f, kArenaWidth);
-    p.pos.y = clamp(p.pos.y, 0.0f, kArenaHeight);
+    sanitize_position(p.pos, {kArenaWidth * 0.5f, kArenaHeight * 0.5f}, kPlayerRadius);
 
     const int ext_mag = state_.upgrades.levels[static_cast<size_t>(UpgradeId::ExtendedMag)];
     p.mag_capacity = 12 + ext_mag * 3;
@@ -136,7 +160,7 @@ void Simulator::update_player(const Action& action) {
 }
 
 void Simulator::update_zombies() {
-    const auto& p = state_.player;
+    auto& p = state_.player;
     for (auto& z : state_.zombies) {
         z.slow_timer = std::max(0.0f, z.slow_timer - kFixedDt);
         z.touch_cd = std::max(0.0f, z.touch_cd - kFixedDt);
@@ -147,19 +171,60 @@ void Simulator::update_zombies() {
         z.vel = {dir.x * speed, dir.y * speed};
         z.pos.x += z.vel.x * kFixedDt;
         z.pos.y += z.vel.y * kFixedDt;
+        sanitize_position(z.pos, p.pos, kZombieRadius);
     }
 
-    for (size_t i = 0; i < state_.zombies.size(); ++i) {
-        for (size_t j = i + 1; j < state_.zombies.size(); ++j) {
-            Vec2 d{state_.zombies[j].pos.x - state_.zombies[i].pos.x, state_.zombies[j].pos.y - state_.zombies[i].pos.y};
+    for (int it = 0; it < 2; ++it) {
+        for (size_t i = 0; i < state_.zombies.size(); ++i) {
+            for (size_t j = i + 1; j < state_.zombies.size(); ++j) {
+                Vec2 d{state_.zombies[j].pos.x - state_.zombies[i].pos.x, state_.zombies[j].pos.y - state_.zombies[i].pos.y};
+                float l = length(d);
+                Vec2 n{};
+                if (l > 1e-6f) {
+                    n = {d.x / l, d.y / l};
+                } else {
+                    n = fallback_normal_for_pair(i, j);
+                    l = 0.0f;
+                }
+
+                if (l < kZombieSeparationRadius) {
+                    const float penetration = kZombieSeparationRadius - l;
+                    const float push = std::min(0.5f * penetration, kMaxSeparationCorrectionPerTick);
+                    state_.zombies[i].pos.x -= n.x * push;
+                    state_.zombies[i].pos.y -= n.y * push;
+                    state_.zombies[j].pos.x += n.x * push;
+                    state_.zombies[j].pos.y += n.y * push;
+                }
+
+                sanitize_position(state_.zombies[i].pos, p.pos, kZombieRadius);
+                sanitize_position(state_.zombies[j].pos, p.pos, kZombieRadius);
+            }
+        }
+
+        for (size_t i = 0; i < state_.zombies.size(); ++i) {
+            auto& z = state_.zombies[i];
+            Vec2 d{z.pos.x - p.pos.x, z.pos.y - p.pos.y};
             float l = length(d);
-            if (l > 0.001f && l < kZombieSeparationRadius) {
-                Vec2 n{d.x / l, d.y / l};
-                float push = (kZombieSeparationRadius - l) * 0.5f;
-                state_.zombies[i].pos.x -= n.x * push;
-                state_.zombies[i].pos.y -= n.y * push;
-                state_.zombies[j].pos.x += n.x * push;
-                state_.zombies[j].pos.y += n.y * push;
+            const float min_dist = kPlayerRadius + kZombieRadius;
+            if (l < min_dist) {
+                Vec2 n{};
+                if (l > 1e-6f) {
+                    n = {d.x / l, d.y / l};
+                } else {
+                    n = fallback_normal_for_pair(i, state_.zombies.size() + 1);
+                    l = 0.0f;
+                }
+
+                const float penetration = min_dist - l;
+                const float z_push = std::min(0.9f * penetration, kMaxSeparationCorrectionPerTick);
+                const float p_push = std::min(0.1f * penetration, 1.2f);
+                z.pos.x += n.x * z_push;
+                z.pos.y += n.y * z_push;
+                p.pos.x -= n.x * p_push;
+                p.pos.y -= n.y * p_push;
+
+                sanitize_position(z.pos, p.pos, kZombieRadius);
+                sanitize_position(p.pos, {kArenaWidth * 0.5f, kArenaHeight * 0.5f}, kPlayerRadius);
             }
         }
     }
@@ -168,9 +233,9 @@ void Simulator::update_zombies() {
         for (const auto& obstacle : state_.obstacles) {
             circle_vs_aabb_resolve(z.pos, kZombieRadius, obstacle);
         }
-        z.pos.x = clamp(z.pos.x, 0.0f, kArenaWidth);
-        z.pos.y = clamp(z.pos.y, 0.0f, kArenaHeight);
+        sanitize_position(z.pos, p.pos, kZombieRadius);
     }
+    sanitize_position(p.pos, {kArenaWidth * 0.5f, kArenaHeight * 0.5f}, kPlayerRadius);
 }
 
 void Simulator::update_bullets() {
@@ -273,13 +338,14 @@ StepResult Simulator::step(const Action& action) {
 
         for (auto& z : state_.zombies) {
             Vec2 d{z.pos.x - state_.player.pos.x, z.pos.y - state_.player.pos.y};
-            if (length(d) < 16.0f && z.touch_cd <= 0.0f && state_.player.invuln_timer <= 0.0f) {
+            if (length(d) < (kPlayerRadius + kZombieRadius) && z.touch_cd <= 0.0f && state_.player.invuln_timer <= 0.0f) {
                 state_.player.health -= 10.0f;
                 state_.stats.damage_taken += 10.0f;
-                z.touch_cd = 0.25f;
-                state_.player.invuln_timer = 0.45f;
+                z.touch_cd = 1.5f;
             }
         }
+
+        state_.player.health = std::max(0.0f, state_.player.health);
 
         if (state_.player.health <= 0.0f) {
             const size_t sw = static_cast<size_t>(UpgradeId::SecondWind);
@@ -308,6 +374,19 @@ StepResult Simulator::step(const Action& action) {
 
         state_.episode_time_s += kFixedDt;
         state_.tick += 1;
+
+#ifndef NDEBUG
+        assert(is_finite_vec(state_.player.pos));
+        assert(is_finite_vec(state_.player.vel));
+        assert(state_.player.health >= 0.0f);
+        assert(state_.player.stamina >= 0.0f);
+        for (const auto& z : state_.zombies) {
+            assert(is_finite_vec(z.pos));
+            assert(is_finite_vec(z.vel));
+            assert(z.touch_cd >= 0.0f);
+            assert(z.slow_timer >= 0.0f);
+        }
+#endif
     }
 
     StepResult out{};
