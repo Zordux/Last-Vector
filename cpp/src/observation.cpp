@@ -1,8 +1,10 @@
 #include "lastvector/observation.hpp"
+#include "lastvector/collision.hpp"
 #include "lastvector/config.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace lv {
 
@@ -10,11 +12,20 @@ namespace {
 float len(Vec2 v) {
     return std::sqrt(v.x * v.x + v.y * v.y);
 }
+
+constexpr float kZombieRadius = 10.0f;
+constexpr float kRayMaxRange = 600.0f;
+constexpr float kTwoPi = 6.28318530718f;
+
+float normalize_ray_t(float t_hit) {
+    if (!std::isfinite(t_hit)) return 1.0f;
+    return clamp(t_hit / kRayMaxRange, 0.0f, 1.0f);
+}
 } // namespace
 
 std::vector<float> build_observation(const GameState& state) {
     std::vector<float> obs;
-    obs.reserve(16 + kZombieObsCount * 5 + kRayCount + 32);
+    obs.reserve(16 + kZombieObsCount * 5 + (kRayCount * 2) + 36);
 
     const auto& p = state.player;
     obs.push_back(p.pos.x / kArenaWidth);
@@ -52,20 +63,38 @@ std::vector<float> build_observation(const GameState& state) {
         }
     }
 
+    const Obstacle arena_bounds{0.0f, 0.0f, kArenaWidth, kArenaHeight};
     for (int i = 0; i < kRayCount; ++i) {
-        const float theta = (static_cast<float>(i) / static_cast<float>(kRayCount)) * 6.28318530718f;
-        const float dx = std::cos(theta);
-        const float dy = std::sin(theta);
-        float t = 1.0f;
-        if (dx > 0.0f) t = std::min(t, (kArenaWidth - p.pos.x) / (dx * 300.0f));
-        if (dx < 0.0f) t = std::min(t, (0.0f - p.pos.x) / (dx * 300.0f));
-        if (dy > 0.0f) t = std::min(t, (kArenaHeight - p.pos.y) / (dy * 300.0f));
-        if (dy < 0.0f) t = std::min(t, (0.0f - p.pos.y) / (dy * 300.0f));
-        obs.push_back(std::clamp(t, 0.0f, 1.0f));
+        const float theta = (static_cast<float>(i) / static_cast<float>(kRayCount)) * kTwoPi;
+        const Vec2 dir{std::cos(theta), std::sin(theta)};
+
+        float obstacle_t = ray_intersect_aabb(p.pos, dir, arena_bounds);
+        for (const auto& obstacle : state.obstacles) {
+            obstacle_t = std::min(obstacle_t, ray_intersect_aabb(p.pos, dir, obstacle));
+        }
+
+        float zombie_t = std::numeric_limits<float>::infinity();
+        for (const auto& z : state.zombies) {
+            zombie_t = std::min(zombie_t, ray_intersect_circle(p.pos, dir, z.pos, kZombieRadius));
+        }
+
+        obs.push_back(normalize_ray_t(std::min(obstacle_t, kRayMaxRange)));
+        obs.push_back(normalize_ray_t(std::min(zombie_t, kRayMaxRange)));
     }
 
     obs.push_back(state.difficulty_scalar);
-    obs.push_back(state.play_state == PlayState::ChoosingUpgrade ? 1.0f : 0.0f);
+    const bool choosing_upgrade = state.play_state == PlayState::ChoosingUpgrade;
+    obs.push_back(choosing_upgrade ? 1.0f : 0.0f);
+
+    if (choosing_upgrade) {
+        const float denom = std::max(1.0f, static_cast<float>(static_cast<int>(UpgradeId::Count) - 1));
+        for (int i = 0; i < 3; ++i) {
+            const int upgrade_id = static_cast<int>(state.upgrade_offer[static_cast<size_t>(i)]);
+            obs.push_back(static_cast<float>(upgrade_id) / denom);
+        }
+    } else {
+        obs.insert(obs.end(), {0.0f, 0.0f, 0.0f});
+    }
 
     for (int lv : state.upgrades.levels) {
         obs.push_back(static_cast<float>(lv) / 5.0f);
