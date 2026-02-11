@@ -14,11 +14,12 @@ ext_modules = [
             str(ROOT / "cpp/src/python_bindings.cpp"),
             str(ROOT / "cpp/src/sim.cpp"),
             str(ROOT / "cpp/src/observation.cpp"),
+            str(ROOT / "cpp/src/collision.cpp"),
             str(ROOT / "cpp/src/upgrades.cpp"),
         ],
         include_dirs=[str(ROOT / "cpp/include"), pybind11.get_include()],
         language="c++",
-        extra_compile_args=["-std=c++20"],
+        extra_compile_args=["-std=c++20", "-Wall", "-Wextra", "-Wpedantic"],
     )
 ]
 

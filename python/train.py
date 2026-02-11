@@ -73,8 +73,20 @@ def write_json(path: Path, payload: Dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def validate_args(args: argparse.Namespace) -> None:
+    if args.total_steps <= 0:
+        raise ValueError("--total-steps must be > 0")
+    if args.episode_seconds <= 0.0:
+        raise ValueError("--episode-seconds must be > 0")
+    if args.n_steps <= 0:
+        raise ValueError("--n-steps must be > 0")
+    if args.batch_size <= 0:
+        raise ValueError("--batch-size must be > 0")
+
+
 def main() -> None:
     args = parse_args()
+    validate_args(args)
     set_global_seed(args.seed)
 
     run_id = args.run_id or datetime.now().strftime("run_%Y%m%d_%H%M%S")
@@ -85,6 +97,11 @@ def main() -> None:
 
     for directory in (run_dir, ckpt_dir, tb_dir):
         directory.mkdir(parents=True, exist_ok=True)
+
+    train_log = run_dir / "train.log"
+    error_log = run_dir / "error.log"
+    train_log.touch(exist_ok=True)
+    error_log.touch(exist_ok=True)
 
     config = {
         "algo": "PPO",
@@ -99,6 +116,7 @@ def main() -> None:
         "run_id": run_id,
     }
     write_json(run_dir / "config.json", config)
+    write_json(run_dir / "status.json", {"state": "running", "updated_at": time.time()})
 
     def make_env(env_seed: int) -> Monitor:
         env_config = EnvConfig(episode_limit_s=args.episode_seconds, simulator_seed=env_seed)
@@ -142,8 +160,17 @@ def main() -> None:
         ]
     )
 
-    model.learn(total_timesteps=args.total_steps, callback=callbacks, progress_bar=True)
-    model.save(run_dir / "final_model")
+    try:
+        model.learn(total_timesteps=args.total_steps, callback=callbacks, progress_bar=True)
+        model.save(run_dir / "final_model")
+        write_json(run_dir / "status.json", {"state": "completed", "updated_at": time.time()})
+    except Exception as exc:
+        error_log.write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
+        write_json(
+            run_dir / "status.json",
+            {"state": "failed", "updated_at": time.time(), "error": f"{type(exc).__name__}: {exc}"},
+        )
+        raise
 
 
 if __name__ == "__main__":

@@ -2,5 +2,12 @@ build/
 .venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+dist/
+
 runs/*
 !runs/.gitkeep

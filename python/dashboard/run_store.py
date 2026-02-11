@@ -61,8 +61,15 @@ class RunStore:
     def _list_checkpoints(self, ckpt_dir: Path) -> List[str]:
         if not ckpt_dir.exists():
             return []
-        checkpoints = sorted(ckpt_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
-        return [checkpoint.name for checkpoint in checkpoints]
+        checkpoints: List[tuple[float, str]] = []
+        for path in ckpt_dir.glob("*.zip"):
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            checkpoints.append((mtime, path.name))
+        checkpoints.sort(key=lambda item: item[0], reverse=True)
+        return [name for _, name in checkpoints]
 
     def run_summary(self, run_id: str) -> Dict[str, Any]:
         run_dir = self.root / run_id
