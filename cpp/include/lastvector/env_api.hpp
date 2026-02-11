@@ -11,6 +11,10 @@ namespace lv {
 struct StepInfo {
     int kills = 0;
     float damage_taken = 0.0f;
+    int shots_fired = 0;
+    int hits = 0;
+    float accuracy = 0.0f;
+    float damage_dealt = 0.0f;
     int selected_upgrade = -1;
     std::unordered_map<std::string, float> scalars;
 };

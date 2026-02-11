@@ -57,6 +57,7 @@ struct RuntimeStats {
     float damage_taken = 0.0f;
     int shots_fired = 0;
     int shots_hit = 0;
+    float damage_dealt = 0.0f;
 };
 
 struct GameState {

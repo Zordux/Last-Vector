@@ -80,11 +80,11 @@ class PySimulator {
         info["time_alive_seconds"] = state.episode_time_s;
         info["kills"] = out.info.kills;
         info["damage_taken"] = out.info.damage_taken;
+        info["shots_fired"] = out.info.shots_fired;
+        info["hits"] = out.info.hits;
+        info["accuracy"] = out.info.accuracy;
+        info["damage_dealt"] = out.info.damage_dealt;
         info["is_choosing_upgrade"] = state.play_state == lv::PlayState::ChoosingUpgrade;
-
-        const int shots_fired = state.stats.shots_fired;
-        const int shots_hit = state.stats.shots_hit;
-        info["accuracy"] = (shots_fired > 0) ? static_cast<float>(shots_hit) / static_cast<float>(shots_fired) : 0.0f;
 
         for (const auto& [key, value] : out.info.scalars) {
             info[py::str(key)] = value;

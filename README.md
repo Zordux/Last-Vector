@@ -70,7 +70,8 @@ python python/train.py --run-id run_001 --total-steps 2000000
 
 Artifacts under `runs/run_001/`:
 - `config.json`
-- `metrics.csv`
+- `metrics.csv` (live scalar history: reward, episode length, kills, combat stats)
+- `status.json` (live dashboard snapshot updated every ~7s or 10k steps)
 - `checkpoints/`
 - `best_model.zip`
 - `tensorboard/`
@@ -80,6 +81,34 @@ Launch TensorBoard:
 ```bash
 tensorboard --logdir runs/run_001/tensorboard
 ```
+
+---
+
+### Training metrics exposed
+
+`status.json` now includes:
+- `steps_done`, `total_steps`, `progress_pct`
+- `fps`, `episodes_done`
+- `best_model_path`, `best_score`
+- `latest_reward`, `latest_ep_len`, `latest_kills`
+- `device`, `last_update_time`
+
+`metrics.csv` includes rolling combat fields used by the dashboard:
+- `kills`, `shots_fired`, `hits`, `accuracy`
+- `damage_dealt`, `damage_taken`
+
+The environment `info` dictionary exposes the same combat counters (`shots_fired`, `hits`, `accuracy`, `damage_dealt`, `kills`, `damage_taken`) for logging and debugging.
+
+### Reward shaping (combat-focused, deterministic)
+
+To encourage fighting without destabilizing PPO:
+- Kill reward increased from `1.25` to `1.45` (**+16%**).
+- Added micro-rewards for successful combat:
+  - `+0.03` per hit
+  - `+0.002` per damage dealt
+- Reduced wasted-shot penalty from `0.01` to `0.008` per shot when no hits land.
+
+This keeps random firing discouraged, while making accurate combat slightly more attractive.
 
 ---
 

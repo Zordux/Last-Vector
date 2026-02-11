@@ -28,14 +28,47 @@ class CsvMetricsCallback(BaseCallback):
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._wrote_header = self.path.exists() and self.path.stat().st_size > 0
+        self.episodes_done = 0
+        self.last_episode_reward = 0.0
+        self.last_episode_len = 0.0
+        self.last_episode_kills = 0.0
+        self.last_shots_fired = 0
+        self.last_hits = 0
+        self.last_accuracy = 0.0
+        self.last_damage_dealt = 0.0
+        self.last_damage_taken = 0.0
 
     def _on_step(self) -> bool:
+        infos = self.locals.get("infos", [])
+        for info in infos:
+            episode = info.get("episode")
+            if episode is not None:
+                self.episodes_done += 1
+                self.last_episode_reward = float(episode.get("r", 0.0))
+                self.last_episode_len = float(episode.get("l", 0.0))
+                self.last_episode_kills = float(episode.get("kills", info.get("kills", 0.0)))
+            self.last_shots_fired = int(info.get("shots_fired", self.last_shots_fired))
+            self.last_hits = int(info.get("hits", self.last_hits))
+            self.last_accuracy = float(info.get("accuracy", self.last_accuracy))
+            self.last_damage_dealt = float(info.get("damage_dealt", self.last_damage_dealt))
+            self.last_damage_taken = float(info.get("damage_taken", self.last_damage_taken))
+
         row = {
             "ts": time.time(),
             "timesteps": int(self.num_timesteps),
             "fps": float(self.model.logger.name_to_value.get("time/fps", 0.0)),
             "ep_rew_mean": float(self.model.logger.name_to_value.get("rollout/ep_rew_mean", 0.0)),
             "ep_len_mean": float(self.model.logger.name_to_value.get("rollout/ep_len_mean", 0.0)),
+            "episodes_done": int(self.episodes_done),
+            "last_ep_reward": float(self.last_episode_reward),
+            "last_ep_len": float(self.last_episode_len),
+            "last_ep_kills": float(self.last_episode_kills),
+            "kills": float(self.last_episode_kills),
+            "shots_fired": int(self.last_shots_fired),
+            "hits": int(self.last_hits),
+            "accuracy": float(self.last_accuracy),
+            "damage_dealt": float(self.last_damage_dealt),
+            "damage_taken": float(self.last_damage_taken),
         }
 
         with self.path.open("a", encoding="utf-8", newline="") as handle:
@@ -45,6 +78,64 @@ class CsvMetricsCallback(BaseCallback):
                 self._wrote_header = True
             writer.writerow(row)
         return True
+
+
+class StatusCallback(BaseCallback):
+    """Persist lightweight training status for dashboard polling."""
+
+    def __init__(
+        self,
+        *,
+        path: Path,
+        total_steps: int,
+        device: str,
+        eval_callback: EvalCallback,
+        metrics_callback: CsvMetricsCallback,
+        update_every_seconds: float = 7.0,
+        update_every_steps: int = 10_000,
+    ):
+        super().__init__()
+        self.path = path
+        self.total_steps = int(total_steps)
+        self.device = device
+        self.eval_callback = eval_callback
+        self.metrics_callback = metrics_callback
+        self.update_every_seconds = float(update_every_seconds)
+        self.update_every_steps = int(update_every_steps)
+        self._last_write_ts = 0.0
+        self._last_write_steps = 0
+
+    def _write_status(self, state: str) -> None:
+        payload = {
+            "state": state,
+            "steps_done": int(self.num_timesteps),
+            "total_steps": int(self.total_steps),
+            "progress_pct": (100.0 * float(self.num_timesteps) / float(self.total_steps)) if self.total_steps > 0 else 0.0,
+            "fps": float(self.model.logger.name_to_value.get("time/fps", 0.0)),
+            "episodes_done": int(self.metrics_callback.episodes_done),
+            "latest_reward": float(self.metrics_callback.last_episode_reward),
+            "latest_ep_len": float(self.metrics_callback.last_episode_len),
+            "latest_kills": float(self.metrics_callback.last_episode_kills),
+            "best_model_path": str((self.path.parent / "best_model.zip").resolve()),
+            "best_score": float(self.eval_callback.best_mean_reward),
+            "device": str(self.model.device),
+            "device_requested": self.device,
+            "last_update_time": time.time(),
+        }
+        write_json(self.path, payload)
+
+    def _on_step(self) -> bool:
+        now = time.time()
+        if (now - self._last_write_ts) >= self.update_every_seconds or (
+            int(self.num_timesteps) - self._last_write_steps
+        ) >= self.update_every_steps:
+            self._write_status("running")
+            self._last_write_ts = now
+            self._last_write_steps = int(self.num_timesteps)
+        return True
+
+    def _on_training_end(self) -> None:
+        self._write_status("completed")
 
 
 def parse_args() -> argparse.Namespace:
@@ -116,7 +207,24 @@ def main() -> None:
         "run_id": run_id,
     }
     write_json(run_dir / "config.json", config)
-    write_json(run_dir / "status.json", {"state": "running", "updated_at": time.time()})
+    write_json(
+        run_dir / "status.json",
+        {
+            "state": "running",
+            "steps_done": 0,
+            "total_steps": int(args.total_steps),
+            "progress_pct": 0.0,
+            "fps": 0.0,
+            "episodes_done": 0,
+            "latest_reward": 0.0,
+            "latest_ep_len": 0.0,
+            "latest_kills": 0.0,
+            "best_model_path": str((run_dir / "best_model.zip").resolve()),
+            "best_score": 0.0,
+            "device": args.device,
+            "last_update_time": time.time(),
+        },
+    )
 
     def make_env(env_seed: int) -> Monitor:
         env_config = EnvConfig(episode_limit_s=args.episode_seconds, simulator_seed=env_seed)
@@ -139,36 +247,55 @@ def main() -> None:
         device=args.device,
     )
 
-    callbacks = CallbackList(
-        [
-            CheckpointCallback(
-                save_freq=50_000,
-                save_path=str(ckpt_dir),
-                name_prefix="ppo_last_vector",
-                save_replay_buffer=False,
-                save_vecnormalize=False,
-            ),
-            EvalCallback(
-                eval_env=eval_env,
-                best_model_save_path=str(run_dir),
-                log_path=str(run_dir),
-                eval_freq=25_000,
-                deterministic=True,
-                render=False,
-            ),
-            CsvMetricsCallback(metrics_path),
-        ]
+    checkpoint_cb = CheckpointCallback(
+        save_freq=50_000,
+        save_path=str(ckpt_dir),
+        name_prefix="ppo_last_vector",
+        save_replay_buffer=False,
+        save_vecnormalize=False,
     )
+    eval_cb = EvalCallback(
+        eval_env=eval_env,
+        best_model_save_path=str(run_dir),
+        log_path=str(run_dir),
+        eval_freq=25_000,
+        deterministic=True,
+        render=False,
+    )
+    metrics_cb = CsvMetricsCallback(metrics_path)
+    status_cb = StatusCallback(
+        path=run_dir / "status.json",
+        total_steps=args.total_steps,
+        device=args.device,
+        eval_callback=eval_cb,
+        metrics_callback=metrics_cb,
+    )
+    callbacks = CallbackList([checkpoint_cb, eval_cb, metrics_cb, status_cb])
 
     try:
         model.learn(total_timesteps=args.total_steps, callback=callbacks, progress_bar=True)
         model.save(run_dir / "final_model")
-        write_json(run_dir / "status.json", {"state": "completed", "updated_at": time.time()})
+        status_cb._write_status("completed")
     except Exception as exc:
         error_log.write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
         write_json(
             run_dir / "status.json",
-            {"state": "failed", "updated_at": time.time(), "error": f"{type(exc).__name__}: {exc}"},
+            {
+                "state": "failed",
+                "steps_done": int(getattr(model, "num_timesteps", 0)),
+                "total_steps": int(args.total_steps),
+                "progress_pct": (100.0 * float(getattr(model, "num_timesteps", 0)) / float(args.total_steps)),
+                "fps": float(model.logger.name_to_value.get("time/fps", 0.0)),
+                "episodes_done": int(metrics_cb.episodes_done),
+                "latest_reward": float(metrics_cb.last_episode_reward),
+                "latest_ep_len": float(metrics_cb.last_episode_len),
+                "latest_kills": float(metrics_cb.last_episode_kills),
+                "best_model_path": str((run_dir / "best_model.zip").resolve()),
+                "best_score": float(eval_cb.best_mean_reward),
+                "device": str(model.device),
+                "last_update_time": time.time(),
+                "error": f"{type(exc).__name__}: {exc}",
+            },
         )
         raise
 

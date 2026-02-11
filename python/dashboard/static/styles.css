@@ -138,3 +138,28 @@ input[type="search"] {
 @media (max-width: 980px) {
   .layout { grid-template-columns: 1fr; }
 }
+
+.table-wrap {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.mini-table th,
+.mini-table td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.mini-table th:first-child,
+.mini-table td:first-child {
+  text-align: left;
+}

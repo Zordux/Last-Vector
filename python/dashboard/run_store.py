@@ -4,7 +4,7 @@ import csv
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 class RunStore:
@@ -58,6 +58,17 @@ class RunStore:
         except (TypeError, ValueError):
             return default
 
+    @staticmethod
+    def _fmt_ts(value: Any) -> str:
+        ts = RunStore._to_float(value, 0.0)
+        if ts <= 0.0:
+            return "n/a"
+        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+
+    @staticmethod
+    def _tb_url(run_id: str) -> str:
+        return f"http://localhost:6006/#scalars&regexInput={run_id}"
+
     def _list_checkpoints(self, ckpt_dir: Path) -> List[str]:
         if not ckpt_dir.exists():
             return []
@@ -71,6 +82,24 @@ class RunStore:
         checkpoints.sort(key=lambda item: item[0], reverse=True)
         return [name for _, name in checkpoints]
 
+    def _extract_series(self, metrics_rows: List[Dict[str, Any]], limit: int = 300) -> Dict[str, List[float]]:
+        rows = metrics_rows[-limit:]
+        steps = [self._to_int(row.get("timesteps"), 0) for row in rows]
+        rewards = [self._to_float(row.get("ep_rew_mean"), 0.0) for row in rows]
+        ep_lens = [self._to_float(row.get("ep_len_mean"), 0.0) for row in rows]
+        kills = [self._to_float(row.get("kills", row.get("last_ep_kills", 0.0)), 0.0) for row in rows]
+        recent_rows = [
+            {"step": steps[idx], "reward": rewards[idx], "episode_length": ep_lens[idx], "kills": kills[idx]}
+            for idx in range(max(0, len(steps) - 20), len(steps))
+        ]
+        return {
+            "steps": steps,
+            "reward": rewards,
+            "episode_length": ep_lens,
+            "kills": kills,
+            "recent_rows": recent_rows,
+        }
+
     def run_summary(self, run_id: str) -> Dict[str, Any]:
         run_dir = self.root / run_id
         config = self._read_json(run_dir / "config.json")
@@ -82,16 +111,22 @@ class RunStore:
         best_model = run_dir / "best_model.zip"
         tensorboard_dir = run_dir / "tensorboard"
 
-        state = "stopped"
-        if metrics_rows:
-            state = "active"
-        if "state" in status:
-            state = str(status.get("state", state))
+        state = str(status.get("state", "stopped" if not metrics_rows else "active"))
 
-        last_update_ts = self._to_float(last_metric.get("ts"), 0.0)
-        last_update = "n/a"
-        if last_update_ts > 0:
-            last_update = datetime.fromtimestamp(last_update_ts, tz=timezone.utc).isoformat()
+        total_steps = self._to_int(status.get("total_steps", config.get("total_steps")), 0)
+        steps_done = self._to_int(status.get("steps_done", last_metric.get("timesteps")), 0)
+        progress_pct = self._to_float(status.get("progress_pct"), 0.0)
+        if total_steps > 0 and progress_pct <= 0.0:
+            progress_pct = min(100.0, 100.0 * float(steps_done) / float(total_steps))
+
+        fps = self._to_float(status.get("fps", last_metric.get("fps")), 0.0)
+        episodes_done = self._to_int(status.get("episodes_done", last_metric.get("episodes_done")), 0)
+        latest_reward = self._to_float(status.get("latest_reward", last_metric.get("last_ep_reward")), 0.0)
+        latest_ep_len = self._to_float(status.get("latest_ep_len", last_metric.get("last_ep_len")), 0.0)
+        last_update = self._fmt_ts(status.get("last_update_time", last_metric.get("ts")))
+
+        best_score = self._to_float(status.get("best_score"), 0.0)
+        best_model_path = status.get("best_model_path") or (str(best_model) if best_model.exists() else "n/a")
 
         error_log_lines = self._tail_lines(run_dir / "error.log", limit=50)
         train_log_lines = self._tail_lines(run_dir / "train.log", limit=50)
@@ -102,21 +137,31 @@ class RunStore:
             "config": config,
             "status": status,
             "metrics": {
-                "steps": self._to_int(last_metric.get("timesteps"), 0),
-                "episodes": self._to_int(status.get("episodes"), 0),
-                "best_reward": self._to_float(status.get("best_reward"), 0.0),
-                "avg_reward": self._to_float(last_metric.get("ep_rew_mean"), 0.0),
-                "avg_survival": self._to_float(last_metric.get("ep_len_mean"), 0.0),
-                "kills": self._to_int(status.get("kills"), 0),
-                "damage_taken": self._to_float(status.get("damage_taken"), 0.0),
-                "fps": self._to_float(last_metric.get("fps"), 0.0),
+                "steps": steps_done,
+                "total_steps": total_steps,
+                "progress_pct": progress_pct,
+                "episodes": episodes_done,
+                "best_reward": best_score,
+                "avg_reward": self._to_float(last_metric.get("ep_rew_mean"), latest_reward),
+                "avg_survival": self._to_float(last_metric.get("ep_len_mean"), latest_ep_len),
+                "latest_reward": latest_reward,
+                "latest_ep_len": latest_ep_len,
+                "kills": self._to_float(last_metric.get("kills", last_metric.get("last_ep_kills", 0.0)), 0.0),
+                "damage_taken": self._to_float(last_metric.get("damage_taken"), 0.0),
+                "fps": fps,
                 "last_update": last_update,
             },
+            "series": self._extract_series(metrics_rows),
             "checkpoints": checkpoints,
             "current_checkpoint": checkpoints[0] if checkpoints else None,
             "best_model": str(best_model) if best_model.exists() else None,
+            "best_model_info": {
+                "path": str(best_model_path),
+                "score": best_score,
+            },
             "tensorboard_dir": str(tensorboard_dir) if tensorboard_dir.exists() else None,
             "tensorboard_cmd": f"tensorboard --logdir {tensorboard_dir}" if tensorboard_dir.exists() else None,
+            "tensorboard_link": self._tb_url(run_id),
             "train_log_lines": train_log_lines,
             "error_log_lines": error_log_lines,
         }
