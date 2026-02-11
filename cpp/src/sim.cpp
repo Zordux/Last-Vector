@@ -1,4 +1,5 @@
 #include "lastvector/sim.hpp"
+#include "lastvector/collision.hpp"
 #include "lastvector/config.hpp"
 #include "lastvector/observation.hpp"
 #include "lastvector/upgrade.hpp"
@@ -11,13 +12,15 @@ namespace {
 
 float length(Vec2 v) { return std::sqrt(v.x * v.x + v.y * v.y); }
 
+constexpr float kPlayerRadius = 10.0f;
+constexpr float kZombieRadius = 10.0f;
+constexpr float kZombieSeparationRadius = 24.0f;
+
 Vec2 normalize(Vec2 v) {
     const float l = length(v);
     if (l <= 1e-6f) return {0.0f, 0.0f};
     return {v.x / l, v.y / l};
 }
-
-float clampf(float v, float lo, float hi) { return std::max(lo, std::min(v, hi)); }
 
 } // namespace
 
@@ -86,8 +89,13 @@ void Simulator::update_player(const Action& action) {
     p.vel.x *= (1.0f - friction * kFixedDt);
     p.vel.y *= (1.0f - friction * kFixedDt);
 
-    p.pos.x = clampf(p.pos.x + p.vel.x * kFixedDt, 0.0f, kArenaWidth);
-    p.pos.y = clampf(p.pos.y + p.vel.y * kFixedDt, 0.0f, kArenaHeight);
+    p.pos.x += p.vel.x * kFixedDt;
+    p.pos.y += p.vel.y * kFixedDt;
+    for (const auto& obstacle : state_.obstacles) {
+        circle_vs_aabb_resolve(p.pos, kPlayerRadius, obstacle);
+    }
+    p.pos.x = clamp(p.pos.x, 0.0f, kArenaWidth);
+    p.pos.y = clamp(p.pos.y, 0.0f, kArenaHeight);
 
     const int ext_mag = state_.upgrades.levels[static_cast<size_t>(UpgradeId::ExtendedMag)];
     p.mag_capacity = 12 + ext_mag * 3;
@@ -137,23 +145,31 @@ void Simulator::update_zombies() {
         float speed = 155.0f + state_.difficulty_scalar * 16.0f;
         if (z.slow_timer > 0.0f) speed *= 0.62f;
         z.vel = {dir.x * speed, dir.y * speed};
-        z.pos.x = clampf(z.pos.x + z.vel.x * kFixedDt, 0.0f, kArenaWidth);
-        z.pos.y = clampf(z.pos.y + z.vel.y * kFixedDt, 0.0f, kArenaHeight);
+        z.pos.x += z.vel.x * kFixedDt;
+        z.pos.y += z.vel.y * kFixedDt;
     }
 
     for (size_t i = 0; i < state_.zombies.size(); ++i) {
         for (size_t j = i + 1; j < state_.zombies.size(); ++j) {
             Vec2 d{state_.zombies[j].pos.x - state_.zombies[i].pos.x, state_.zombies[j].pos.y - state_.zombies[i].pos.y};
             float l = length(d);
-            if (l > 0.001f && l < 20.0f) {
+            if (l > 0.001f && l < kZombieSeparationRadius) {
                 Vec2 n{d.x / l, d.y / l};
-                float push = (20.0f - l) * 0.5f;
+                float push = (kZombieSeparationRadius - l) * 0.5f;
                 state_.zombies[i].pos.x -= n.x * push;
                 state_.zombies[i].pos.y -= n.y * push;
                 state_.zombies[j].pos.x += n.x * push;
                 state_.zombies[j].pos.y += n.y * push;
             }
         }
+    }
+
+    for (auto& z : state_.zombies) {
+        for (const auto& obstacle : state_.obstacles) {
+            circle_vs_aabb_resolve(z.pos, kZombieRadius, obstacle);
+        }
+        z.pos.x = clamp(z.pos.x, 0.0f, kArenaWidth);
+        z.pos.y = clamp(z.pos.y, 0.0f, kArenaHeight);
     }
 }
 
@@ -163,6 +179,16 @@ void Simulator::update_bullets() {
     for (auto& b : state_.bullets) {
         b.pos.x += b.vel.x * kFixedDt;
         b.pos.y += b.vel.y * kFixedDt;
+
+        bool hit_obstacle = false;
+        for (const auto& obstacle : state_.obstacles) {
+            if (circle_vs_aabb_overlap(b.pos, b.radius, obstacle)) {
+                b.pos = {-1000.0f, -1000.0f};
+                hit_obstacle = true;
+                break;
+            }
+        }
+        if (hit_obstacle) continue;
 
         for (auto& z : state_.zombies) {
             Vec2 d{z.pos.x - b.pos.x, z.pos.y - b.pos.y};

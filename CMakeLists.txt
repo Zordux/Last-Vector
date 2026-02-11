@@ -9,6 +9,7 @@ option(LASTVECTOR_WITH_RAYLIB "Build rendered client with raylib" ON)
 add_library(lastvector_core
     cpp/src/sim.cpp
     cpp/src/observation.cpp
+    cpp/src/collision.cpp
     cpp/src/upgrades.cpp
 )
 
