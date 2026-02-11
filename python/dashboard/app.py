@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 import psutil
 import uvicorn
 
-from run_store import RunStore
+from .run_store import RunStore
 
 
 def create_app(runs_dir: Path) -> FastAPI:

@@ -1,3 +1,3 @@
-from .env import LastVectorEnv
+from .env import EnvConfig, LastVectorEnv
 
-__all__ = ["LastVectorEnv"]
+__all__ = ["LastVectorEnv", "EnvConfig"]
