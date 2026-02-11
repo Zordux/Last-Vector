@@ -269,7 +269,9 @@ void Simulator::update_bullets() {
         for (auto& z : state_.zombies) {
             Vec2 d{z.pos.x - b.pos.x, z.pos.y - b.pos.y};
             if (length(d) <= (10.0f + b.radius)) {
+                const float damage_applied = std::min(z.hp, b.damage);
                 z.hp -= b.damage;
+                state_.stats.damage_dealt += std::max(0.0f, damage_applied);
                 if (frost > 0) z.slow_timer = std::max(z.slow_timer, 0.4f + 0.3f * frost);
                 b.pierce -= 1;
                 state_.stats.shots_hit += 1;
@@ -317,8 +319,16 @@ void Simulator::handle_upgrade_choice(const Action& action) {
 
 float Simulator::compute_reward(const RuntimeStats& prev) const {
     float reward = 0.02f;
-    reward += static_cast<float>(state_.stats.kills - prev.kills) * 1.25f;
-    reward -= (state_.stats.damage_taken - prev.damage_taken) * 0.05f;
+    const int kills_delta = state_.stats.kills - prev.kills;
+    const float damage_taken_delta = state_.stats.damage_taken - prev.damage_taken;
+    const int shots_delta = state_.stats.shots_fired - prev.shots_fired;
+    const int hits_delta = state_.stats.shots_hit - prev.shots_hit;
+    const float damage_dealt_delta = state_.stats.damage_dealt - prev.damage_dealt;
+
+    reward += static_cast<float>(kills_delta) * 1.45f;
+    reward += static_cast<float>(hits_delta) * 0.03f;
+    reward += damage_dealt_delta * 0.002f;
+    reward -= damage_taken_delta * 0.05f;
 
     const float nearest = [&]() {
         float best = 9999.0f;
@@ -330,9 +340,7 @@ float Simulator::compute_reward(const RuntimeStats& prev) const {
     }();
     if (nearest < 120.0f) reward -= (120.0f - nearest) * 0.0008f;
 
-    const int shots_delta = state_.stats.shots_fired - prev.shots_fired;
-    const int hits_delta = state_.stats.shots_hit - prev.shots_hit;
-    if (shots_delta > 0 && hits_delta == 0) reward -= 0.01f * shots_delta;
+    if (shots_delta > 0 && hits_delta == 0) reward -= 0.008f * shots_delta;
     return reward;
 }
 
@@ -407,8 +415,20 @@ StepResult Simulator::step(const Action& action) {
     out.truncated = state_.episode_time_s >= kEpisodeLimitSeconds;
     out.info.kills = state_.stats.kills;
     out.info.damage_taken = state_.stats.damage_taken;
+    out.info.shots_fired = state_.stats.shots_fired;
+    out.info.hits = state_.stats.shots_hit;
+    out.info.accuracy = (state_.stats.shots_fired > 0)
+                            ? static_cast<float>(state_.stats.shots_hit) / static_cast<float>(state_.stats.shots_fired)
+                            : 0.0f;
+    out.info.damage_dealt = state_.stats.damage_dealt;
     out.info.scalars["difficulty"] = state_.difficulty_scalar;
     out.info.scalars["zombies_alive"] = static_cast<float>(state_.zombies.size());
+    out.info.scalars["shots_fired"] = static_cast<float>(state_.stats.shots_fired);
+    out.info.scalars["hits"] = static_cast<float>(state_.stats.shots_hit);
+    out.info.scalars["accuracy"] = out.info.accuracy;
+    out.info.scalars["damage_dealt"] = state_.stats.damage_dealt;
+    out.info.scalars["kills"] = static_cast<float>(state_.stats.kills);
+    out.info.scalars["damage_taken"] = state_.stats.damage_taken;
     return out;
 }
 
