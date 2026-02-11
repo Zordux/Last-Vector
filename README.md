@@ -94,6 +94,25 @@ Evaluation runs headless and prints aggregate metrics.
 
 ---
 
+## Watch trained PPO in rendered game (inference only)
+
+Terminal 1 (agent server):
+
+```bash
+export PYTHONPATH="$(pwd)/python:$(pwd)/python/last_vector_env/native:${PYTHONPATH}"
+python python/agent_server.py --model runs/test2/best_model.zip --host 127.0.0.1 --port 5555
+```
+
+Terminal 2 (rendered game client):
+
+```bash
+./build/last_vector --agent 127.0.0.1:5555 --seed 0
+```
+
+`--agent HOST:PORT` switches control to the inference server and disables local player input.
+
+---
+
 ## Dashboard (LAN)
 
 Run from repo root:
