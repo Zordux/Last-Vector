@@ -15,7 +15,7 @@ struct Vec2 {
 };
 
 struct Player {
-    Vec2 pos{700.0f, 450.0f};
+    Vec2 pos{kPlayerSpawnX, kPlayerSpawnY};
     Vec2 vel{};
     float health = 100.0f;
     float max_health = 100.0f;
