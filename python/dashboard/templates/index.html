@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <title>Last-Vector Dashboard</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 1rem 2rem; background: #111; color: #eee; }
+      .card { border: 1px solid #444; padding: 1rem; margin-bottom: 1rem; border-radius: 8px; }
+      code { color: #99e2ff; }
+    </style>
+  </head>
+  <body>
+    <h1>Last-Vector Training Dashboard</h1>
+    <p>LAN binding mode. Keep this endpoint on trusted networks.</p>
+
+    {% if runs|length == 0 %}
+      <p>No runs found in <code>runs/</code>.</p>
+    {% endif %}
+
+    {% for run in runs %}
+      <div class="card">
+        <h2>{{ run.run_id }}</h2>
+        <p>State: <b>{{ run.state }}</b></p>
+        <p>Algo: {{ run.config.get('algo', 'n/a') }}</p>
+        <p>Timesteps: {{ run.last_metric.get('timesteps', 0) }}</p>
+        <p>Rolling reward: {{ run.last_metric.get('ep_rew_mean', 0) }}</p>
+        <p>Checkpoint count: {{ run.checkpoints|length }}</p>
+        <p>Best model: {{ run.best_model or 'none' }}</p>
+      </div>
+    {% endfor %}
+  </body>
+</html>
