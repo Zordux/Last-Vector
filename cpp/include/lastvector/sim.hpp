@@ -16,6 +16,11 @@ class Simulator {
     std::vector<float> reset(uint64_t seed);
     StepResult step(const Action& action);
 
+    static constexpr int action_dim() { return 8; }
+    static constexpr int observation_dim() {
+        return 11 + (kZombieObsCount * 5) + (kRayCount * 2) + 2 + 3 + static_cast<int>(UpgradeId::Count);
+    }
+
     const GameState& state() const { return state_; }
 
   private:
