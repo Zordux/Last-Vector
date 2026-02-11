@@ -29,13 +29,16 @@ if(LASTVECTOR_WITH_RAYLIB)
 endif()
 
 if(LASTVECTOR_BUILD_PYTHON)
-    include(FetchContent)
-    FetchContent_Declare(
-        pybind11
-        GIT_REPOSITORY https://github.com/pybind/pybind11.git
-        GIT_TAG v2.13.6
-    )
-    FetchContent_MakeAvailable(pybind11)
+    find_package(pybind11 CONFIG QUIET)
+    if(NOT pybind11_FOUND)
+        include(FetchContent)
+        FetchContent_Declare(
+            pybind11
+            GIT_REPOSITORY https://github.com/pybind/pybind11.git
+            GIT_TAG v2.13.6
+        )
+        FetchContent_MakeAvailable(pybind11)
+    endif()
 
     pybind11_add_module(last_vector_core_module cpp/src/python_bindings.cpp)
     target_link_libraries(last_vector_core_module PRIVATE lastvector_core)

@@ -27,6 +27,15 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
+If your environment blocks GitHub access, install `pybind11` into the active venv and point CMake to it:
+
+```bash
+python -m pip install pybind11
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$(python -m pybind11 --cmakedir)"
+cmake --build build -j
+```
+
 This builds:
 - `last_vector` executable
 - `last_vector_core` Python module at:
