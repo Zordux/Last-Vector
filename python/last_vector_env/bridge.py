@@ -1,71 +1,50 @@
-"""Pure-Python deterministic bridge mirroring the C++ API contract.
-
-Replace this module with pybind11 bindings to `lastvector_core` for production training.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
-import random
-from typing import Dict, List, Tuple
+from typing import Any, Dict, Tuple
+
+import numpy as np
+
+import last_vector_core
 
 
 @dataclass
-class StepResult:
-    observation: List[float]
+class BridgeStep:
+    observation: np.ndarray
     reward: float
     terminated: bool
     truncated: bool
-    info: Dict[str, float]
+    info: Dict[str, Any]
 
 
-class MockDeterministicCore:
+class SimulatorBridge:
+    """Thin Python bridge to the real C++ deterministic simulator."""
+
     def __init__(self) -> None:
-        self.rng = random.Random(0)
-        self.t = 0
-        self.hp = 1.0
-        self.z = 0.0
-        self.choosing = False
+        self._sim = last_vector_core.Simulator()
+        self.obs_dim = int(self._sim.observation_dim())
+        self.action_dim = int(last_vector_core.Simulator.action_dim())
 
-    def reset(self, seed: int) -> List[float]:
-        self.rng.seed(seed)
-        self.t = 0
-        self.hp = 1.0
-        self.z = 0.0
-        self.choosing = False
-        return self._obs()
+    def reset(self, seed: int) -> np.ndarray:
+        obs = self._sim.reset(int(seed))
+        return np.asarray(obs, dtype=np.float32)
 
-    def step(self, action: Dict[str, float]) -> StepResult:
-        self.t += 1
-        if self.t % (20 * 60) == 0:
-            self.choosing = True
-        if self.choosing and int(action.get("upgrade_choice", -1)) in (0, 1, 2):
-            self.choosing = False
-
-        self.z += 0.01
-        if action.get("shoot", 0.0) > 0.5 and self.rng.random() < 0.35:
-            reward = 1.25
+    def step(self, action: np.ndarray) -> BridgeStep:
+        clipped = np.asarray(action, dtype=np.float32).copy()
+        if clipped.shape != (self.action_dim,):
+            raise ValueError(f"action shape must be ({self.action_dim},)")
+        clipped[:4] = np.clip(clipped[:4], -1.0, 1.0)
+        clipped[4:7] = np.clip(clipped[4:7], 0.0, 1.0)
+        if clipped[7] < -0.5:
+            clipped[7] = -1.0
         else:
-            reward = 0.02
+            clipped[7] = float(np.clip(np.rint(clipped[7]), 0.0, 2.0))
 
-        self.hp -= max(0.0, 0.003 * (1.0 + self.z) - 0.001 * action.get("sprint", 0.0))
-        terminated = self.hp <= 0.0
-        truncated = self.t >= 180 * 60
-        reward -= (1.0 - self.hp) * 0.01
-
-        info = {
-            "kills": float(self.t // 120),
-            "damage_taken": float((1.0 - max(self.hp, 0.0)) * 100.0),
-            "difficulty": self.z,
-            "choosing_upgrade": float(self.choosing),
-        }
-        return StepResult(self._obs(), reward, terminated, truncated, info)
-
-    def _obs(self) -> List[float]:
-        obs = [0.5, 0.5, 0.0, 0.0, self.hp, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
-        obs.extend([0.0] * (8 * 5))
-        obs.extend([1.0] * 16)
-        obs.extend([self.z, 1.0 if self.choosing else 0.0])
-        obs.extend([0.0] * 8)
-        return obs
+        obs, reward, terminated, truncated, info = self._sim.step(clipped)
+        return BridgeStep(
+            observation=np.asarray(obs, dtype=np.float32),
+            reward=float(reward),
+            terminated=bool(terminated),
+            truncated=bool(truncated),
+            info=dict(info),
+        )

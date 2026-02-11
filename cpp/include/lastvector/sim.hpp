@@ -6,6 +6,7 @@
 #include "state.hpp"
 
 #include <cstdint>
+#include <vector>
 
 namespace lv {
 
@@ -17,6 +18,9 @@ class Simulator {
     StepResult step(const Action& action);
 
     const GameState& state() const { return state_; }
+
+    int observation_dim() const;
+    static constexpr int action_dim() { return 8; }
 
   private:
     GameState state_{};

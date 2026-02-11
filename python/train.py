@@ -18,11 +18,18 @@ class JsonlMetricsCallback(BaseCallback):
         super().__init__()
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.episodes = 0
 
     def _on_step(self) -> bool:
+        infos = self.locals.get("infos", [])
+        for info in infos:
+            if isinstance(info, dict) and "episode" in info:
+                self.episodes += 1
+
         row = {
             "ts": time.time(),
             "timesteps": int(self.num_timesteps),
+            "episodes": int(self.episodes),
             "fps": float(self.model.logger.name_to_value.get("time/fps", 0.0)),
             "ep_rew_mean": float(self.model.logger.name_to_value.get("rollout/ep_rew_mean", 0.0)),
             "ep_len_mean": float(self.model.logger.name_to_value.get("rollout/ep_len_mean", 0.0)),
@@ -53,7 +60,7 @@ def main() -> None:
 
     config = {
         "algo": "PPO",
-        "policy": "MultiInputPolicy",
+        "policy": "MlpPolicy",
         "total_steps": args.total_steps,
         "seed": args.seed,
         "lr": args.lr,
@@ -66,7 +73,7 @@ def main() -> None:
     eval_env = DummyVecEnv([lambda: Monitor(LastVectorEnv(render_mode="none"))])
 
     model = PPO(
-        "MultiInputPolicy",
+        "MlpPolicy",
         train_env,
         seed=args.seed,
         learning_rate=args.lr,
