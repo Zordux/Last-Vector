@@ -1,41 +1,110 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
-    <meta charset="utf-8"/>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Last-Vector Dashboard</title>
-    <style>
-      body { font-family: Arial, sans-serif; margin: 1rem 2rem; background: #111; color: #eee; }
-      .card { border: 1px solid #444; padding: 1rem; margin-bottom: 1rem; border-radius: 8px; }
-      code, a { color: #99e2ff; }
-      .muted { color: #bbb; }
-      .state { font-weight: bold; }
-    </style>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script defer src="/static/app.js"></script>
   </head>
   <body>
-    <h1>Last-Vector Training Dashboard</h1>
-    <p><b>LAN exposure warning:</b> this dashboard binds on <code>0.0.0.0</code>. Keep it on trusted networks only.</p>
-
-    {% if runs|length == 0 %}
-      <p>No runs found in <code>runs/</code>.</p>
-    {% endif %}
-
-    {% for run in runs %}
-      <div class="card">
-        <h2>{{ run.run_id }}</h2>
-        <p>State: <span class="state">{{ run.state }}</span></p>
-        <p>Algo: {{ run.config.get('algo', 'n/a') }} | Policy: {{ run.config.get('policy', 'n/a') }}</p>
-        <p>Timesteps: {{ run.last_metric.get('timesteps', 0) }} | Reward(mean): {{ run.last_metric.get('ep_rew_mean', 0) }}</p>
-        <p>Current checkpoint: {{ run.current_checkpoint or 'none' }}</p>
-        <p>Best model: {{ run.best_model or 'none' }}</p>
-        <p>Checkpoint count: {{ run.checkpoints|length }}</p>
-        <p>TensorBoard logdir: {{ run.tensorboard_dir or 'none' }}</p>
-        {% if run.tensorboard_dir %}
-        <p class="muted">Launch: <code>tensorboard --logdir {{ run.tensorboard_dir }}</code></p>
-        {% endif %}
-        {% if run.status %}
-        <p>Status file: <code>{{ run.status }}</code></p>
-        {% endif %}
+    <header class="topbar">
+      <div>
+        <h1>Last-Vector Training Dashboard</h1>
+        <p class="muted">LAN status: bound to <code>0.0.0.0</code> by default.</p>
       </div>
-    {% endfor %}
+      <div class="status-row">
+        <span class="pill">Runs: {{ run_count }}</span>
+        <button id="themeToggle" class="btn" type="button">Toggle theme</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel sidebar">
+        <h2>Runs</h2>
+        <input id="runSearch" type="search" placeholder="Search by run-id/date" />
+        <ul id="runList" class="run-list">
+          {% for run in runs %}
+          <li class="run-item" data-run-id="{{ run.run_id }}">
+            <button class="run-select {% if loop.first %}active{% endif %}" data-run-target="run-{{ loop.index0 }}" type="button">
+              <strong>{{ run.run_id }}</strong>
+              <small>{{ run.state }} • {{ run.metrics.last_update }}</small>
+              <small>steps={{ run.metrics.steps }} | best={{ "%.2f"|format(run.metrics.best_reward) }}</small>
+            </button>
+          </li>
+          {% endfor %}
+        </ul>
+      </aside>
+
+      <section class="panel content">
+        <nav class="tabs">
+          <button class="tab active" data-tab="details" type="button">Run details</button>
+          <button class="tab" data-tab="settings" type="button">Settings / About</button>
+        </nav>
+
+        {% if runs|length == 0 %}
+        <div class="empty">
+          <h2>No runs yet</h2>
+          <p class="muted">No run directories were found under <code>runs/</code>.</p>
+        </div>
+        {% else %}
+          {% for run in runs %}
+          <article id="run-{{ loop.index0 }}" class="run-panel {% if not loop.first %}hidden{% endif %}" data-content="details">
+            <div class="cards">
+              <div class="card"><span>State</span><strong>{{ run.state }}</strong></div>
+              <div class="card"><span>Steps</span><strong>{{ run.metrics.steps }}</strong></div>
+              <div class="card"><span>Episodes</span><strong>{{ run.metrics.episodes }}</strong></div>
+              <div class="card"><span>Avg reward</span><strong>{{ "%.3f"|format(run.metrics.avg_reward) }}</strong></div>
+              <div class="card"><span>Avg survival</span><strong>{{ "%.2f"|format(run.metrics.avg_survival) }}</strong></div>
+              <div class="card"><span>Kills / Damage</span><strong>{{ run.metrics.kills }} / {{ "%.1f"|format(run.metrics.damage_taken) }}</strong></div>
+            </div>
+
+            <div class="split">
+              <section class="subpanel">
+                <h3>Checkpoints</h3>
+                {% if run.checkpoints|length == 0 %}
+                  <p class="muted">No checkpoints found.</p>
+                {% else %}
+                  <ul class="plain-list">
+                    {% for ckpt in run.checkpoints[:10] %}
+                    <li>{{ ckpt }}</li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+                {% if run.tensorboard_cmd %}
+                  <p class="muted">TensorBoard: <code>{{ run.tensorboard_cmd }}</code></p>
+                {% else %}
+                  <p class="muted">TensorBoard logs unavailable.</p>
+                {% endif %}
+              </section>
+
+              <section class="subpanel">
+                <h3>Recent logs</h3>
+                {% if run.train_log_lines|length == 0 %}
+                  <p class="muted">No train.log found.</p>
+                {% else %}
+                  <pre class="log-box">{{ run.train_log_lines|join('\n') }}</pre>
+                {% endif %}
+                {% if run.error_log_lines|length > 0 %}
+                  <h4>Last error</h4>
+                  <pre class="log-box error">{{ run.error_log_lines|join('\n') }}</pre>
+                {% endif %}
+              </section>
+            </div>
+          </article>
+          {% endfor %}
+
+          <article class="run-panel hidden" data-content="settings">
+            <h2>Settings / About</h2>
+            <p>This dashboard is intentionally lightweight and server-rendered.</p>
+            <ul>
+              <li>Host default: <code>0.0.0.0</code> (LAN)</li>
+              <li>Gracefully handles empty runs and parse errors.</li>
+              <li>No heavy frontend framework dependencies.</li>
+            </ul>
+          </article>
+        {% endif %}
+      </section>
+    </main>
   </body>
 </html>

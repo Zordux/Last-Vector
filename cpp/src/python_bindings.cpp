@@ -66,6 +66,9 @@ class PySimulator {
     }
 
     py::tuple step(const py::array_t<float, py::array::c_style | py::array::forcecast>& action) {
+        if (action.ndim() != 1 || action.shape(0) != lv::Simulator::action_dim()) {
+            throw py::value_error("action must be a float32 array with shape (8,)");
+        }
         const lv::Action parsed = action_from_array(action, sim_.state());
         auto out = sim_.step(parsed);
         steps_ += 1;
@@ -87,7 +90,20 @@ class PySimulator {
             info[py::str(key)] = value;
         }
 
-        return py::make_tuple(as_numpy(out.observation), out.reward, out.terminated, out.truncated, info);
+        auto obs = as_numpy(out.observation);
+        auto obs_view = obs.mutable_unchecked<1>();
+        for (py::ssize_t i = 0; i < obs_view.shape(0); ++i) {
+            if (!std::isfinite(obs_view(i))) {
+                obs_view(i) = 0.0f;
+            }
+        }
+
+        float reward = out.reward;
+        if (!std::isfinite(reward)) {
+            reward = 0.0f;
+        }
+
+        return py::make_tuple(obs, reward, out.terminated, out.truncated, info);
     }
 
     int obs_dim() const { return lv::Simulator::observation_dim(); }

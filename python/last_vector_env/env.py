@@ -12,17 +12,25 @@ import last_vector_core
 
 @dataclass
 class EnvConfig:
+    """Runtime configuration for LastVectorEnv."""
+
     episode_limit_s: float = 180.0
+    simulator_seed: int = 0
 
 
 class LastVectorEnv(gym.Env[np.ndarray, np.ndarray]):
+    """Gymnasium wrapper around the native Last-Vector simulator."""
+
     metadata = {"render_modes": ["none"], "render_fps": 60}
 
     def __init__(self, config: Optional[EnvConfig] = None, render_mode: str = "none") -> None:
         super().__init__()
         self.config = config or EnvConfig()
         self.render_mode = render_mode
-        self.core = last_vector_core.Simulator(seed=0, episode_seconds=float(self.config.episode_limit_s))
+        self.core = last_vector_core.Simulator(
+            seed=int(self.config.simulator_seed),
+            episode_seconds=float(self.config.episode_limit_s),
+        )
 
         self.action_space = spaces.Box(
             low=np.array([-1, -1, -1, -1, 0, 0, 0, -1], dtype=np.float32),
@@ -39,21 +47,36 @@ class LastVectorEnv(gym.Env[np.ndarray, np.ndarray]):
         )
 
     def reset(
-        self, *, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None
+        self,
+        *,
+        seed: Optional[int] = None,
+        options: Optional[Dict[str, Any]] = None,
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
-        super().reset(seed=seed)
-        s = seed if seed is not None else int(self.np_random.integers(0, 2**31 - 1))
-        obs = np.asarray(self.core.reset(s), dtype=np.float32)
-        return np.ascontiguousarray(obs), {"seed": s}
+        """Reset environment state and return (observation, info)."""
 
-    def step(self, action: np.ndarray):
+        del options
+        super().reset(seed=seed)
+        resolved_seed = seed if seed is not None else int(self.np_random.integers(0, 2**31 - 1))
+        obs = np.asarray(self.core.reset(int(resolved_seed)), dtype=np.float32)
+        return np.ascontiguousarray(obs), {"seed": int(resolved_seed)}
+
+    def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
+        """Advance one step and return Gymnasium step tuple."""
+
         action_arr = np.asarray(action, dtype=np.float32).reshape(-1)
+        action_arr = np.clip(action_arr, self.action_space.low, self.action_space.high)
         obs, reward, terminated, truncated, info = self.core.step(action_arr)
         obs_np = np.asarray(obs, dtype=np.float32)
-        return np.ascontiguousarray(obs_np), float(reward), bool(terminated), bool(truncated), dict(info)
+        return (
+            np.ascontiguousarray(obs_np),
+            float(reward),
+            bool(terminated),
+            bool(truncated),
+            dict(info),
+        )
 
-    def render(self):
+    def render(self) -> None:
         return None
 
-    def close(self):
+    def close(self) -> None:
         return None

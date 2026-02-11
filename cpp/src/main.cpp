@@ -1,6 +1,7 @@
 #include "lastvector/sim.hpp"
 
 #include <cstdint>
+#include <exception>
 #include <iostream>
 #include <string>
 
@@ -8,17 +9,59 @@
 #include <raylib.h>
 #endif
 
+namespace {
+
+void print_usage() {
+    std::cout << "Usage: last_vector [--headless|--rendered] [--seed N] [--max-steps N]\n";
+}
+
+} // namespace
+
 int main(int argc, char** argv) {
+#ifdef LASTVECTOR_WITH_RAYLIB
     bool headless = false;
-    uint64_t seed = 1337;
+#endif
+    std::uint64_t seed = 1337;
     int max_steps = 36000;
 
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-        if (arg == "--headless") headless = true;
-        if (arg == "--rendered") headless = false;
-        if (arg == "--seed" && i + 1 < argc) seed = std::stoull(argv[++i]);
-        if (arg == "--max-steps" && i + 1 < argc) max_steps = std::stoi(argv[++i]);
+    try {
+        for (int i = 1; i < argc; ++i) {
+            const std::string arg = argv[i];
+#ifndef LASTVECTOR_WITH_RAYLIB
+            if (arg == "--rendered") {
+                std::cerr << "Rendered mode is unavailable: built without raylib.\n";
+                return 2;
+            }
+#endif
+            if (arg == "--headless") {
+#ifdef LASTVECTOR_WITH_RAYLIB
+                headless = true;
+#endif
+            } else if (arg == "--rendered") {
+#ifdef LASTVECTOR_WITH_RAYLIB
+                headless = false;
+#endif
+            } else if (arg == "--seed" && i + 1 < argc) {
+                seed = std::stoull(argv[++i]);
+            } else if (arg == "--max-steps" && i + 1 < argc) {
+                max_steps = std::stoi(argv[++i]);
+            } else if (arg == "--help" || arg == "-h") {
+                print_usage();
+                return 0;
+            } else {
+                std::cerr << "Unknown or incomplete argument: " << arg << '\n';
+                print_usage();
+                return 2;
+            }
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "Failed to parse CLI arguments: " << ex.what() << '\n';
+        return 2;
+    }
+
+    if (max_steps < 1) {
+        std::cerr << "--max-steps must be >= 1\n";
+        return 2;
     }
 
     lv::Simulator sim;
@@ -37,7 +80,7 @@ int main(int argc, char** argv) {
             action.reload = IsKeyPressed(KEY_R);
             action.shoot = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
 
-            Vector2 mouse = GetMousePosition();
+            const Vector2 mouse = GetMousePosition();
             const auto& state = sim.state();
             action.aim_x = (mouse.x - state.player.pos.x) / 300.0f;
             action.aim_y = (mouse.y - state.player.pos.y) / 300.0f;
@@ -89,7 +132,9 @@ int main(int argc, char** argv) {
             action.upgrade_choice = 0;
         }
         const auto res = sim.step(action);
-        if (res.terminated || res.truncated) break;
+        if (res.terminated || res.truncated) {
+            break;
+        }
     }
 
     const auto& end_state = sim.state();
