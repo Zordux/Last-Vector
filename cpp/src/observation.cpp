@@ -1,8 +1,10 @@
 #include "lastvector/observation.hpp"
 #include "lastvector/collision.hpp"
 #include "lastvector/config.hpp"
+#include "lastvector/sim.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <limits>
 
@@ -21,6 +23,17 @@ float normalize_ray_t(float t_hit) {
     if (!std::isfinite(t_hit)) return 1.0f;
     return clamp(t_hit / kRayMaxRange, 0.0f, 1.0f);
 }
+
+float safe_normalize(float value, float scale) {
+    if (!std::isfinite(value) || scale <= 0.0f || !std::isfinite(scale)) {
+        return 0.0f;
+    }
+    return value / scale;
+}
+
+float finite_or_zero(float value) {
+    return std::isfinite(value) ? value : 0.0f;
+}
 } // namespace
 
 std::vector<float> build_observation(const GameState& state) {
@@ -28,17 +41,17 @@ std::vector<float> build_observation(const GameState& state) {
     obs.reserve(16 + kZombieObsCount * 5 + (kRayCount * 2) + 36);
 
     const auto& p = state.player;
-    obs.push_back(p.pos.x / kArenaWidth);
-    obs.push_back(p.pos.y / kArenaHeight);
-    obs.push_back(p.vel.x / 400.0f);
-    obs.push_back(p.vel.y / 400.0f);
-    obs.push_back(p.health / p.max_health);
-    obs.push_back(p.stamina / std::max(1.0f, p.max_stamina));
+    obs.push_back(safe_normalize(p.pos.x, kArenaWidth));
+    obs.push_back(safe_normalize(p.pos.y, kArenaHeight));
+    obs.push_back(safe_normalize(p.vel.x, 400.0f));
+    obs.push_back(safe_normalize(p.vel.y, 400.0f));
+    obs.push_back(safe_normalize(p.health, std::max(1.0f, p.max_health)));
+    obs.push_back(safe_normalize(p.stamina, std::max(1.0f, p.max_stamina)));
     obs.push_back(static_cast<float>(p.mag) / std::max(1, p.mag_capacity));
-    obs.push_back(static_cast<float>(p.reserve) / 300.0f);
-    obs.push_back(p.shoot_cd);
-    obs.push_back(p.reload_timer);
-    obs.push_back(p.invuln_timer);
+    obs.push_back(safe_normalize(static_cast<float>(p.reserve), 300.0f));
+    obs.push_back(finite_or_zero(p.shoot_cd));
+    obs.push_back(finite_or_zero(p.reload_timer));
+    obs.push_back(finite_or_zero(p.invuln_timer));
 
     std::vector<std::pair<float, const Zombie*>> near;
     near.reserve(state.zombies.size());
@@ -53,11 +66,11 @@ std::vector<float> build_observation(const GameState& state) {
         if (i < static_cast<int>(near.size())) {
             const Zombie& z = *near[i].second;
             const Vec2 rel{z.pos.x - p.pos.x, z.pos.y - p.pos.y};
-            obs.push_back(rel.x / kArenaWidth);
-            obs.push_back(rel.y / kArenaHeight);
-            obs.push_back(len(rel) / 500.0f);
-            obs.push_back((z.vel.x - p.vel.x) / 400.0f);
-            obs.push_back((z.vel.y - p.vel.y) / 400.0f);
+            obs.push_back(safe_normalize(rel.x, kArenaWidth));
+            obs.push_back(safe_normalize(rel.y, kArenaHeight));
+            obs.push_back(safe_normalize(len(rel), 500.0f));
+            obs.push_back(safe_normalize(z.vel.x - p.vel.x, 400.0f));
+            obs.push_back(safe_normalize(z.vel.y - p.vel.y, 400.0f));
         } else {
             obs.insert(obs.end(), {0, 0, 1, 0, 0});
         }
@@ -82,7 +95,7 @@ std::vector<float> build_observation(const GameState& state) {
         obs.push_back(normalize_ray_t(std::min(zombie_t, kRayMaxRange)));
     }
 
-    obs.push_back(state.difficulty_scalar);
+    obs.push_back(finite_or_zero(state.difficulty_scalar));
     const bool choosing_upgrade = state.play_state == PlayState::ChoosingUpgrade;
     obs.push_back(choosing_upgrade ? 1.0f : 0.0f);
 
@@ -99,6 +112,14 @@ std::vector<float> build_observation(const GameState& state) {
     for (int lv : state.upgrades.levels) {
         obs.push_back(static_cast<float>(lv) / 5.0f);
     }
+
+    for (float& value : obs) {
+        if (!std::isfinite(value)) {
+            value = 0.0f;
+        }
+    }
+
+    assert(static_cast<int>(obs.size()) == Simulator::observation_dim());
 
     return obs;
 }

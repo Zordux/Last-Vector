@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import psutil
 import uvicorn
@@ -14,13 +15,26 @@ from .run_store import RunStore
 
 def create_app(runs_dir: Path) -> FastAPI:
     app = FastAPI(title="Last-Vector Training Dashboard")
-    templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+    template_root = Path(__file__).parent / "templates"
+    static_root = Path(__file__).parent / "static"
+    templates = Jinja2Templates(directory=str(template_root))
+    app.mount("/static", StaticFiles(directory=str(static_root)), name="static")
     store = RunStore(runs_dir)
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
-        runs = [store.run_summary(run_id) for run_id in store.list_runs()]
-        return templates.TemplateResponse("index.html", {"request": request, "runs": runs})
+        run_ids = store.list_runs()
+        runs = [store.run_summary(run_id) for run_id in run_ids]
+        selected_run = runs[0] if runs else None
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "runs": runs,
+                "selected_run": selected_run,
+                "run_count": len(runs),
+            },
+        )
 
     @app.get("/api/runs", response_class=JSONResponse)
     async def api_runs() -> JSONResponse:
@@ -28,11 +42,12 @@ def create_app(runs_dir: Path) -> FastAPI:
 
     @app.get("/api/hw", response_class=JSONResponse)
     async def api_hw() -> JSONResponse:
+        virtual_memory = psutil.virtual_memory()
         return JSONResponse(
             {
-                "cpu_percent": psutil.cpu_percent(),
-                "ram_percent": psutil.virtual_memory().percent,
-                "ram_used_gb": round(psutil.virtual_memory().used / 1e9, 2),
+                "cpu_percent": psutil.cpu_percent(interval=0.0),
+                "ram_percent": virtual_memory.percent,
+                "ram_used_gb": round(virtual_memory.used / 1e9, 2),
             }
         )
 
@@ -40,7 +55,7 @@ def create_app(runs_dir: Path) -> FastAPI:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Serve Last-Vector dashboard over LAN.")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--runs-dir", default="runs")
