@@ -16,7 +16,7 @@ float len(Vec2 v) {
 }
 
 constexpr float kZombieRadius = 10.0f;
-constexpr float kRayMaxRange = 600.0f;
+constexpr float kRayMaxRange = (kArenaWidth > kArenaHeight) ? kArenaWidth : kArenaHeight;
 constexpr float kTwoPi = 6.28318530718f;
 
 float normalize_ray_t(float t_hit) {

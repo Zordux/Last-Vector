@@ -1,5 +1,6 @@
 #include "lastvector/sim.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -72,6 +73,12 @@ int main(int argc, char** argv) {
         InitWindow(1280, 720, "Last-Vector");
         SetTargetFPS(60);
 
+        Camera2D camera{};
+        camera.offset = {GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f};
+        camera.target = {lv::kPlayerSpawnX, lv::kPlayerSpawnY};
+        camera.rotation = 0.0f;
+        camera.zoom = 1.0f;
+
         while (!WindowShouldClose()) {
             lv::Action action{};
             action.move_x = (IsKeyDown(KEY_D) ? 1.0f : 0.0f) - (IsKeyDown(KEY_A) ? 1.0f : 0.0f);
@@ -80,10 +87,10 @@ int main(int argc, char** argv) {
             action.reload = IsKeyPressed(KEY_R);
             action.shoot = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
 
-            const Vector2 mouse = GetMousePosition();
             const auto& state = sim.state();
-            action.aim_x = (mouse.x - state.player.pos.x) / 300.0f;
-            action.aim_y = (mouse.y - state.player.pos.y) / 300.0f;
+            const Vector2 mouse_world = GetScreenToWorld2D(GetMousePosition(), camera);
+            action.aim_x = (mouse_world.x - state.player.pos.x) / 300.0f;
+            action.aim_y = (mouse_world.y - state.player.pos.y) / 300.0f;
 
             if (state.play_state == lv::PlayState::ChoosingUpgrade) {
                 if (IsKeyPressed(KEY_ONE)) action.upgrade_choice = 0;
@@ -93,14 +100,43 @@ int main(int argc, char** argv) {
 
             sim.step(action);
 
+            const auto& s = sim.state();
+            const lv::Vec2 look_dir{action.aim_x, action.aim_y};
+            const float look_len = std::sqrt(look_dir.x * look_dir.x + look_dir.y * look_dir.y);
+            lv::Vec2 look_n = look_dir;
+            if (look_len > 1e-5f && std::isfinite(look_len)) {
+                look_n.x /= look_len;
+                look_n.y /= look_len;
+            } else {
+                look_n = {0.0f, 0.0f};
+            }
+
+            const Vector2 desired_target{
+                s.player.pos.x + look_n.x * lv::kCameraLookAheadDistance,
+                s.player.pos.y + look_n.y * lv::kCameraLookAheadDistance,
+            };
+            camera.target.x += (desired_target.x - camera.target.x) * lv::kCameraFollowLerp;
+            camera.target.y += (desired_target.y - camera.target.y) * lv::kCameraFollowLerp;
+
             BeginDrawing();
             ClearBackground(BLACK);
 
-            const auto& s = sim.state();
+            BeginMode2D(camera);
+            DrawRectangleLinesEx({0.0f, 0.0f, lv::kArenaWidth, lv::kArenaHeight}, 2.0f, DARKGRAY);
             DrawCircleV({s.player.pos.x, s.player.pos.y}, 10.0f, GREEN);
             for (const auto& z : s.zombies) DrawCircleV({z.pos.x, z.pos.y}, 10.0f, RED);
             for (const auto& b : s.bullets) DrawCircleV({b.pos.x, b.pos.y}, b.radius, YELLOW);
             for (const auto& o : s.obstacles) DrawRectangleLinesEx({o.x, o.y, o.w, o.h}, 1.0f, GRAY);
+
+            for (int i = 0; i < lv::kRayCount; ++i) {
+                const float theta = (static_cast<float>(i) / static_cast<float>(lv::kRayCount)) * 6.28318530718f;
+                const Vector2 ray_end{
+                    s.player.pos.x + std::cos(theta) * 160.0f,
+                    s.player.pos.y + std::sin(theta) * 160.0f,
+                };
+                DrawLineV({s.player.pos.x, s.player.pos.y}, ray_end, Fade(SKYBLUE, 0.28f));
+            }
+            EndMode2D();
 
             DrawText(TextFormat("HP %.1f  STA %.1f  MAG %d/%d  Kills %d", s.player.health, s.player.stamina, s.player.mag,
                                 s.player.reserve, s.stats.kills),

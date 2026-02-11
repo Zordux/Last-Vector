@@ -63,10 +63,21 @@ std::vector<float> Simulator::reset(uint64_t seed) {
 }
 
 void Simulator::init_obstacles() {
+    const float sx = kArenaWidth / 1400.0f;
+    const float sy = kArenaHeight / 900.0f;
     state_.obstacles = {
-        {220, 150, 180, 60}, {470, 260, 140, 50}, {640, 90, 80, 220}, {920, 170, 150, 60},
-        {1080, 330, 120, 120}, {180, 420, 200, 70}, {440, 520, 60, 200}, {620, 440, 200, 80},
-        {860, 560, 180, 60}, {1140, 520, 80, 200}, {250, 700, 220, 70}, {560, 760, 140, 60},
+        {220.0f * sx, 150.0f * sy, 180.0f * sx, 60.0f * sy},
+        {470.0f * sx, 260.0f * sy, 140.0f * sx, 50.0f * sy},
+        {640.0f * sx, 90.0f * sy, 80.0f * sx, 220.0f * sy},
+        {920.0f * sx, 170.0f * sy, 150.0f * sx, 60.0f * sy},
+        {1080.0f * sx, 330.0f * sy, 120.0f * sx, 120.0f * sy},
+        {180.0f * sx, 420.0f * sy, 200.0f * sx, 70.0f * sy},
+        {440.0f * sx, 520.0f * sy, 60.0f * sx, 200.0f * sy},
+        {620.0f * sx, 440.0f * sy, 200.0f * sx, 80.0f * sy},
+        {860.0f * sx, 560.0f * sy, 180.0f * sx, 60.0f * sy},
+        {1140.0f * sx, 520.0f * sy, 80.0f * sx, 200.0f * sy},
+        {250.0f * sx, 700.0f * sy, 220.0f * sx, 70.0f * sy},
+        {560.0f * sx, 760.0f * sy, 140.0f * sx, 60.0f * sy},
     };
 }
 
@@ -119,7 +130,7 @@ void Simulator::update_player(const Action& action) {
     for (const auto& obstacle : state_.obstacles) {
         circle_vs_aabb_resolve(p.pos, kPlayerRadius, obstacle);
     }
-    sanitize_position(p.pos, {kArenaWidth * 0.5f, kArenaHeight * 0.5f}, kPlayerRadius);
+    sanitize_position(p.pos, {kPlayerSpawnX, kPlayerSpawnY}, kPlayerRadius);
 
     const int ext_mag = state_.upgrades.levels[static_cast<size_t>(UpgradeId::ExtendedMag)];
     p.mag_capacity = 12 + ext_mag * 3;
@@ -224,7 +235,7 @@ void Simulator::update_zombies() {
                 p.pos.y -= n.y * p_push;
 
                 sanitize_position(z.pos, p.pos, kZombieRadius);
-                sanitize_position(p.pos, {kArenaWidth * 0.5f, kArenaHeight * 0.5f}, kPlayerRadius);
+                sanitize_position(p.pos, {kPlayerSpawnX, kPlayerSpawnY}, kPlayerRadius);
             }
         }
     }
@@ -235,7 +246,7 @@ void Simulator::update_zombies() {
         }
         sanitize_position(z.pos, p.pos, kZombieRadius);
     }
-    sanitize_position(p.pos, {kArenaWidth * 0.5f, kArenaHeight * 0.5f}, kPlayerRadius);
+    sanitize_position(p.pos, {kPlayerSpawnX, kPlayerSpawnY}, kPlayerRadius);
 }
 
 void Simulator::update_bullets() {
