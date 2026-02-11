@@ -22,25 +22,17 @@ class RunStore:
 
         config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
 
-        last_metric: Dict[str, Any] = {}
+        last_metric = {}
         if metrics_path.exists():
-            lines = [ln for ln in metrics_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+            lines = metrics_path.read_text(encoding="utf-8").strip().splitlines()
             if lines:
                 last_metric = json.loads(lines[-1])
-
-        checkpoints = sorted([p.name for p in ckpt_dir.glob("*.zip")]) if ckpt_dir.exists() else []
-        current_ckpt = checkpoints[-1] if checkpoints else None
 
         return {
             "run_id": run_id,
             "config": config,
-            "steps": int(last_metric.get("timesteps", 0)),
-            "episodes": int(last_metric.get("episodes", 0)),
             "last_metric": last_metric,
-            "checkpoints": checkpoints,
-            "current_checkpoint": current_ckpt,
-            "best_model": best_model.name if best_model.exists() else None,
-            "tensorboard_dir": str(run_dir / "tensorboard"),
-            "tensorboard_hint": f"tensorboard --logdir {run_dir / 'tensorboard'} --bind_all",
+            "checkpoints": sorted([p.name for p in ckpt_dir.glob("*.zip")]) if ckpt_dir.exists() else [],
+            "best_model": str(best_model) if best_model.exists() else None,
             "state": "running" if last_metric else "stopped",
         }

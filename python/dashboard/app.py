@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 import psutil
 import uvicorn
 
-from .run_store import RunStore
+from run_store import RunStore
 
 
 def create_app(runs_dir: Path) -> FastAPI:
@@ -28,12 +28,11 @@ def create_app(runs_dir: Path) -> FastAPI:
 
     @app.get("/api/hw", response_class=JSONResponse)
     async def api_hw() -> JSONResponse:
-        vm = psutil.virtual_memory()
         return JSONResponse(
             {
                 "cpu_percent": psutil.cpu_percent(),
-                "ram_percent": vm.percent,
-                "ram_used_gb": round(vm.used / 1e9, 2),
+                "ram_percent": psutil.virtual_memory().percent,
+                "ram_used_gb": round(psutil.virtual_memory().used / 1e9, 2),
             }
         )
 

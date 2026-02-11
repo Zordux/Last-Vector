@@ -2,8 +2,5 @@ build/
 .venv/
 __pycache__/
 *.pyc
-*.so
-python/build/
-python/*.egg-info/
 runs/*
 !runs/.gitkeep
