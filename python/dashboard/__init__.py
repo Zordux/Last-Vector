@@ -1,0 +1,1 @@
+"""Last-Vector dashboard package."""
