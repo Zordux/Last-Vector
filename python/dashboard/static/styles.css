@@ -1,22 +1,22 @@
 :root {
-  --bg: #0b0f14;
-  --panel: #121923;
-  --panel-alt: #172130;
-  --text: #e8eef7;
-  --muted: #9aa8bc;
-  --accent: #61dafb;
-  --border: #273244;
+  --bg: #0b0c14;
+  --panel: #13121f;
+  --panel-alt: #1a1830;
+  --text: #e8eaf7;
+  --muted: #9a9cbc;
+  --accent: #a855f7;
+  --border: #2d2744;
   --danger: #f25f7a;
 }
 
 :root[data-theme="light"] {
-  --bg: #eef3f8;
+  --bg: #f3eef8;
   --panel: #ffffff;
-  --panel-alt: #f7f9fd;
-  --text: #18202b;
-  --muted: #5f6d80;
-  --accent: #1366d6;
-  --border: #d2dceb;
+  --panel-alt: #f9f7fd;
+  --text: #1b1820;
+  --muted: #6d5f80;
+  --accent: #7c3aed;
+  --border: #dbd2eb;
   --danger: #c53b52;
 }
 
@@ -98,6 +98,10 @@ input[type="search"] {
   border-radius: 8px;
   background: var(--panel-alt);
   border: 1px solid var(--border);
+  transition: border-color 0.2s ease;
+}
+.card:hover {
+  border-color: var(--accent);
 }
 .card span { color: var(--muted); display: block; margin-bottom: 0.3rem; }
 
@@ -116,8 +120,8 @@ input[type="search"] {
 
 .plain-list { margin: 0; padding-left: 1rem; }
 .log-box {
-  background: #0a0e14;
-  color: #e6edf7;
+  background: var(--bg);
+  color: var(--text);
   border-radius: 8px;
   padding: 0.6rem;
   max-height: 260px;
@@ -162,4 +166,39 @@ input[type="search"] {
 .mini-table th:first-child,
 .mini-table td:first-child {
   text-align: left;
+}
+
+.progress-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+  width: 100%;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.status-badge {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.status-badge.running { background: #22c55e; }
+.status-badge.active  { background: #eab308; }
+.status-badge.failed  { background: #ef4444; }
+.status-badge.stopped { background: #6b7280; }
+.status-badge.completed { background: #6b7280; }
+
+.hw-monitor {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
