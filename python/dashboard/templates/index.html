@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Last-Vector Dashboard</title>
     <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     <script defer src="/static/app.js"></script>
   </head>
   <body>
@@ -14,6 +15,11 @@
         <p class="muted">LAN status: bound to <code>0.0.0.0</code> by default.</p>
       </div>
       <div class="status-row">
+        <div class="hw-monitor">
+          <span>CPU: <strong id="hwCpu">–</strong>%</span>
+          <span>RAM: <strong id="hwRam">–</strong>%</span>
+          <span class="muted" id="lastRefreshed">Last refreshed: –</span>
+        </div>
         <span class="pill">Runs: {{ run_count }}</span>
         <button id="themeToggle" class="btn" type="button">Toggle theme</button>
       </div>
@@ -28,9 +34,9 @@
           <li class="run-item" data-run-id="{{ run.run_id }}">
             <button class="run-select {% if loop.first %}active{% endif %}" data-run-target="run-{{ loop.index0 }}" type="button">
               <strong>{{ run.run_id }}</strong>
-              <small>{{ run.state }} • progress={{ "%.1f"|format(run.metrics.progress_pct) }}%</small>
-              <small>fps={{ "%.1f"|format(run.metrics.fps) }} • best={{ "%.2f"|format(run.metrics.best_reward) }}</small>
-              <small>updated={{ run.metrics.last_update }}</small>
+              <small data-run-id="{{ run.run_id }}" data-field="sidebar-state-progress">{{ run.state }} • progress={{ "%.1f"|format(run.metrics.progress_pct) }}%</small>
+              <small data-run-id="{{ run.run_id }}" data-field="sidebar-fps-best">fps={{ "%.1f"|format(run.metrics.fps) }} • best={{ "%.2f"|format(run.metrics.best_reward) }}</small>
+              <small data-run-id="{{ run.run_id }}" data-field="sidebar-update">updated={{ run.metrics.last_update }}</small>
             </button>
           </li>
           {% endfor %}
@@ -52,14 +58,35 @@
           {% for run in runs %}
           <article id="run-{{ loop.index0 }}" class="run-panel {% if not loop.first %}hidden{% endif %}" data-content="details">
             <div class="cards">
-              <div class="card"><span>State</span><strong>{{ run.state }}</strong></div>
-              <div class="card"><span>Progress</span><strong>{{ "%.1f"|format(run.metrics.progress_pct) }}%</strong></div>
-              <div class="card"><span>Steps</span><strong>{{ run.metrics.steps }} / {{ run.metrics.total_steps }}</strong></div>
-              <div class="card"><span>FPS</span><strong>{{ "%.1f"|format(run.metrics.fps) }}</strong></div>
-              <div class="card"><span>Episodes</span><strong>{{ run.metrics.episodes }}</strong></div>
-              <div class="card"><span>Latest R / Len</span><strong>{{ "%.3f"|format(run.metrics.latest_reward) }} / {{ "%.1f"|format(run.metrics.latest_ep_len) }}</strong></div>
-              <div class="card"><span>Best score</span><strong>{{ "%.3f"|format(run.best_model_info.score) }}</strong></div>
-              <div class="card"><span>Last update</span><strong>{{ run.metrics.last_update }}</strong></div>
+              <div class="card"><span>State</span>
+                <strong data-run-id="{{ run.run_id }}" data-field="state">
+                  <span class="status-badge {{ run.state }}"></span>{{ run.state }}
+                </strong>
+              </div>
+              <div class="card"><span>Progress</span>
+                <strong data-run-id="{{ run.run_id }}" data-field="progress_pct">{{ "%.1f"|format(run.metrics.progress_pct) }}%</strong>
+                <div class="progress-bar">
+                  <div class="progress-fill" data-run-id="{{ run.run_id }}" data-field="progress_bar" style="width: {{ run.metrics.progress_pct }}%"></div>
+                </div>
+              </div>
+              <div class="card"><span>Steps</span>
+                <strong data-run-id="{{ run.run_id }}" data-field="steps">{{ run.metrics.steps }} / {{ run.metrics.total_steps }}</strong>
+              </div>
+              <div class="card"><span>FPS</span>
+                <strong data-run-id="{{ run.run_id }}" data-field="fps">{{ "%.1f"|format(run.metrics.fps) }}</strong>
+              </div>
+              <div class="card"><span>Episodes</span>
+                <strong data-run-id="{{ run.run_id }}" data-field="episodes">{{ run.metrics.episodes }}</strong>
+              </div>
+              <div class="card"><span>Latest R / Len</span>
+                <strong data-run-id="{{ run.run_id }}" data-field="latest_r_len">{{ "%.3f"|format(run.metrics.latest_reward) }} / {{ "%.1f"|format(run.metrics.latest_ep_len) }}</strong>
+              </div>
+              <div class="card"><span>Best score</span>
+                <strong data-run-id="{{ run.run_id }}" data-field="best_score">{{ "%.3f"|format(run.best_model_info.score) }}</strong>
+              </div>
+              <div class="card"><span>Last update</span>
+                <strong data-run-id="{{ run.run_id }}" data-field="last_update">{{ run.metrics.last_update }}</strong>
+              </div>
             </div>
 
             <div class="split">
@@ -68,6 +95,8 @@
                 {% if run.series.steps|length == 0 %}
                   <p class="muted">No metrics.csv data available yet.</p>
                 {% else %}
+                  <canvas id="chart-{{ loop.index0 }}" height="200"></canvas>
+                  <script type="application/json" id="series-data-{{ loop.index0 }}">{{ run.series | tojson }}</script>
                   <div class="table-wrap">
                     <table class="mini-table">
                       <thead>
