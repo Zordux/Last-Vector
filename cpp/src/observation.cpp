@@ -15,13 +15,12 @@ float len(Vec2 v) {
     return std::sqrt(v.x * v.x + v.y * v.y);
 }
 
-constexpr float kZombieRadius = 10.0f;
 constexpr float kRayMaxRange = (kArenaWidth > kArenaHeight) ? kArenaWidth : kArenaHeight;
 constexpr float kTwoPi = 6.28318530718f;
 
 float normalize_ray_t(float t_hit) {
     if (!std::isfinite(t_hit)) return 1.0f;
-    return clamp(t_hit / kRayMaxRange, 0.0f, 1.0f);
+    return std::clamp(t_hit / kRayMaxRange, 0.0f, 1.0f);
 }
 
 float safe_normalize(float value, float scale) {

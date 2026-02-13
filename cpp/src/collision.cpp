@@ -18,14 +18,10 @@ bool point_inside_aabb(Vec2 p, const Obstacle& box) {
 
 } // namespace
 
-float clamp(float x, float lo, float hi) {
-    return std::max(lo, std::min(x, hi));
-}
-
 Vec2 closest_point_on_aabb(Vec2 point, const Obstacle& box) {
     return {
-        clamp(point.x, box.x, box.x + box.w),
-        clamp(point.y, box.y, box.y + box.h),
+        std::clamp(point.x, box.x, box.x + box.w),
+        std::clamp(point.y, box.y, box.y + box.h),
     };
 }
 

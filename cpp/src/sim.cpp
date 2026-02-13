@@ -13,8 +13,6 @@ namespace {
 
 float length(Vec2 v) { return std::sqrt(v.x * v.x + v.y * v.y); }
 
-constexpr float kPlayerRadius = 10.0f;
-constexpr float kZombieRadius = 10.0f;
 constexpr float kZombieSeparationRadius = 22.0f;
 constexpr float kSprintSpeedMultiplier = 1.75f;
 constexpr float kMaxSeparationCorrectionPerTick = 4.0f;
@@ -36,8 +34,8 @@ Vec2 fallback_normal_for_pair(size_t a, size_t b) {
 }
 
 void clamp_position_in_bounds(Vec2& pos, float radius) {
-    pos.x = clamp(pos.x, radius, kArenaWidth - radius);
-    pos.y = clamp(pos.y, radius, kArenaHeight - radius);
+    pos.x = std::clamp(pos.x, radius, kArenaWidth - radius);
+    pos.y = std::clamp(pos.y, radius, kArenaHeight - radius);
 }
 
 void sanitize_position(Vec2& pos, Vec2 fallback, float radius) {
@@ -57,6 +55,7 @@ std::vector<float> Simulator::reset(uint64_t seed) {
     state_ = GameState{};
     state_.seed = seed;
     rng_.reseed(seed);
+    upgrade_pause_ticks_ = 0;
     init_obstacles();
     roll_upgrade_offer();
     return build_observation(state_);
@@ -308,12 +307,22 @@ void Simulator::apply_ring_of_fire() {
 
 void Simulator::handle_upgrade_choice(const Action& action) {
     if (state_.play_state != PlayState::ChoosingUpgrade) return;
-    if (action.upgrade_choice < 0 || action.upgrade_choice > 2) return;
-
-    UpgradeId chosen = state_.upgrade_offer[static_cast<size_t>(action.upgrade_choice)];
+    
+    bool valid_choice = (action.upgrade_choice >= 0 && action.upgrade_choice <= 2);
+    
+    if (!valid_choice) {
+        upgrade_pause_ticks_ += 1;
+        if (upgrade_pause_ticks_ < kUpgradeChoiceTimeoutTicks) {
+            return;
+        }
+    }
+    
+    int choice_index = valid_choice ? action.upgrade_choice : 0;
+    UpgradeId chosen = state_.upgrade_offer[static_cast<size_t>(choice_index)];
     apply_upgrade(state_.upgrades, chosen);
     state_.play_state = PlayState::Playing;
     state_.upgrade_clock = 0.0f;
+    upgrade_pause_ticks_ = 0;
     roll_upgrade_offer();
 }
 

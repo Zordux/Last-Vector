@@ -15,8 +15,6 @@ namespace py = pybind11;
 
 namespace {
 
-float clampf(float v, float lo, float hi) { return std::max(lo, std::min(v, hi)); }
-
 py::array_t<float> as_numpy(const std::vector<float>& v) {
     py::array_t<float> arr(v.size());
     std::memcpy(arr.mutable_data(), v.data(), v.size() * sizeof(float));
@@ -31,10 +29,10 @@ lv::Action action_from_array(const py::array_t<float, py::array::c_style | py::a
 
     auto a = arr.unchecked<1>();
     lv::Action out{};
-    out.move_x = clampf(a(0), -1.0f, 1.0f);
-    out.move_y = clampf(a(1), -1.0f, 1.0f);
-    out.aim_x = clampf(a(2), -1.0f, 1.0f);
-    out.aim_y = clampf(a(3), -1.0f, 1.0f);
+    out.move_x = std::clamp(a(0), -1.0f, 1.0f);
+    out.move_y = std::clamp(a(1), -1.0f, 1.0f);
+    out.aim_x = std::clamp(a(2), -1.0f, 1.0f);
+    out.aim_y = std::clamp(a(3), -1.0f, 1.0f);
     out.shoot = a(4) >= 0.5f;
     out.sprint = a(5) >= 0.5f;
     out.reload = a(6) >= 0.5f;
@@ -43,7 +41,7 @@ lv::Action action_from_array(const py::array_t<float, py::array::c_style | py::a
     if (raw_choice < -0.5f) {
         out.upgrade_choice = -1;
     } else {
-        out.upgrade_choice = static_cast<int>(std::round(clampf(raw_choice, 0.0f, 2.0f)));
+        out.upgrade_choice = static_cast<int>(std::round(std::clamp(raw_choice, 0.0f, 2.0f)));
     }
 
     if (state.play_state != lv::PlayState::ChoosingUpgrade) {

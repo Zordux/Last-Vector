@@ -14,6 +14,9 @@ constexpr float kCameraLookAheadDistance = 96.0f;
 constexpr int kZombieObsCount = 8;
 constexpr int kRayCount = 16;
 constexpr float kEpisodeLimitSeconds = 180.0f;
+constexpr float kPlayerRadius = 10.0f;
+constexpr float kZombieRadius = 10.0f;
+constexpr int kUpgradeChoiceTimeoutTicks = 120; // 2 seconds at 60Hz
 
 enum class RunMode {
     Rendered,

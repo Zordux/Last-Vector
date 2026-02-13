@@ -16,8 +16,10 @@ std::vector<UpgradeDef> build_upgrade_catalog() {
 }
 
 void apply_upgrade(UpgradeState& state, UpgradeId id) {
+    // Static initialization ensures catalog is built only once
+    static const std::vector<UpgradeDef> catalog = build_upgrade_catalog();
     const auto idx = static_cast<size_t>(id);
-    if (id == UpgradeId::SecondWind && state.levels[idx] > 0) {
+    if (state.levels[idx] >= catalog[idx].max_stacks) {
         return;
     }
     state.levels[idx] += 1;
