@@ -42,29 +42,36 @@ class CsvMetricsCallback(BaseCallback):
 
     def _on_training_start(self) -> None:
         """Open CSV file and write header if needed."""
-        self._file_handle = self.path.open("a", encoding="utf-8", newline="")
-        fieldnames = [
-            "ts",
-            "timesteps",
-            "fps",
-            "ep_rew_mean",
-            "ep_len_mean",
-            "episodes_done",
-            "last_ep_reward",
-            "last_ep_len",
-            "last_ep_kills",
-            "kills",
-            "shots_fired",
-            "hits",
-            "accuracy",
-            "damage_dealt",
-            "damage_taken",
-        ]
-        self._csv_writer = csv.DictWriter(self._file_handle, fieldnames=fieldnames)
-        if not self._wrote_header:
-            self._csv_writer.writeheader()
-            self._file_handle.flush()
-            self._wrote_header = True
+        try:
+            self._file_handle = self.path.open("a", encoding="utf-8", newline="")
+            fieldnames = [
+                "ts",
+                "timesteps",
+                "fps",
+                "ep_rew_mean",
+                "ep_len_mean",
+                "episodes_done",
+                "last_ep_reward",
+                "last_ep_len",
+                "last_ep_kills",
+                "kills",
+                "shots_fired",
+                "hits",
+                "accuracy",
+                "damage_dealt",
+                "damage_taken",
+            ]
+            self._csv_writer = csv.DictWriter(self._file_handle, fieldnames=fieldnames)
+            if not self._wrote_header:
+                self._csv_writer.writeheader()
+                self._file_handle.flush()
+                self._wrote_header = True
+        except Exception as e:
+            if self._file_handle is not None:
+                self._file_handle.close()
+                self._file_handle = None
+            self._csv_writer = None
+            raise
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", [])
@@ -80,6 +87,9 @@ class CsvMetricsCallback(BaseCallback):
             self.last_accuracy = float(info.get("accuracy", self.last_accuracy))
             self.last_damage_dealt = float(info.get("damage_dealt", self.last_damage_dealt))
             self.last_damage_taken = float(info.get("damage_taken", self.last_damage_taken))
+
+        if self._csv_writer is None or self._file_handle is None:
+            return True
 
         row = {
             "ts": time.time(),
