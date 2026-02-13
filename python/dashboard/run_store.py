@@ -29,7 +29,12 @@ class RunStore:
         if not path.exists():
             return []
         try:
-            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            with path.open("rb") as f:
+                f.seek(0, 2)
+                file_size = f.tell()
+                f.seek(max(0, file_size - 32768), 0)
+                chunk = f.read().decode("utf-8", errors="replace")
+                lines = chunk.splitlines()
         except OSError:
             return []
         return lines[-limit:]
@@ -38,8 +43,20 @@ class RunStore:
         if not metrics_path.exists():
             return []
         try:
-            with metrics_path.open("r", encoding="utf-8", newline="") as handle:
-                rows = list(csv.DictReader(handle))
+            with metrics_path.open("rb") as f:
+                # Read header first
+                header_line = f.readline().decode("utf-8", errors="replace")
+                # Get file size and seek to tail
+                f.seek(0, 2)
+                file_size = f.tell()
+                f.seek(max(0, file_size - 32768), 0)
+                chunk = f.read().decode("utf-8", errors="replace")
+                lines = chunk.splitlines()
+                # Take last 400 lines from chunk
+                tail_lines = lines[-400:]
+                # Prepend header so csv.DictReader works
+                csv_content = header_line.rstrip('\n') + "\n" + "\n".join(tail_lines)
+                rows = list(csv.DictReader(csv_content.splitlines()))
         except (OSError, csv.Error):
             return []
         return rows

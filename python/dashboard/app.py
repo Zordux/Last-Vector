@@ -22,7 +22,7 @@ def create_app(runs_dir: Path) -> FastAPI:
     store = RunStore(runs_dir)
 
     @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request) -> HTMLResponse:
+    def index(request: Request) -> HTMLResponse:
         run_ids = store.list_runs()
         runs = [store.run_summary(run_id) for run_id in run_ids]
         selected_run = runs[0] if runs else None
