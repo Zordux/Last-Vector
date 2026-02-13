@@ -308,12 +308,13 @@ void Simulator::apply_ring_of_fire() {
 void Simulator::handle_upgrade_choice(const Action& action) {
     if (state_.play_state != PlayState::ChoosingUpgrade) return;
     
-    upgrade_pause_ticks_ += 1;
-    
     bool valid_choice = (action.upgrade_choice >= 0 && action.upgrade_choice <= 2);
     
-    if (!valid_choice && upgrade_pause_ticks_ < 120) {
-        return;
+    if (!valid_choice) {
+        upgrade_pause_ticks_ += 1;
+        if (upgrade_pause_ticks_ < 120) {
+            return;
+        }
     }
     
     int choice_index = valid_choice ? action.upgrade_choice : 0;
