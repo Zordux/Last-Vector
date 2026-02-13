@@ -55,7 +55,7 @@ class RunStore:
                 # Take last 400 lines from chunk
                 tail_lines = lines[-400:]
                 # Prepend header so csv.DictReader works
-                csv_content = header_line + "\n".join(tail_lines)
+                csv_content = header_line.rstrip('\n') + "\n" + "\n".join(tail_lines)
                 rows = list(csv.DictReader(csv_content.splitlines()))
         except (OSError, csv.Error):
             return []

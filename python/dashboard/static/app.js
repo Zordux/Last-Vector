@@ -10,6 +10,9 @@
   // Chart.js instances
   const charts = {};
   let lastRefreshedTime = null;
+  let runsPollingInterval = null;
+  let hwPollingInterval = null;
+  let refreshCounterInterval = null;
 
   function showRunPanel(panelId) {
     runPanels.forEach((panel) => panel.classList.toggle('hidden', panel.id !== panelId));
@@ -268,9 +271,9 @@
   }
 
   // Start polling loops
-  setInterval(updateRuns, 5000);
-  setInterval(updateHardware, 3000);
-  setInterval(updateRefreshCounter, 1000);
+  runsPollingInterval = setInterval(updateRuns, 5000);
+  hwPollingInterval = setInterval(updateHardware, 3000);
+  refreshCounterInterval = setInterval(updateRefreshCounter, 1000);
 
   // Do initial updates
   updateRuns();
