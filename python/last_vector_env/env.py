@@ -33,8 +33,8 @@ class LastVectorEnv(gym.Env[np.ndarray, np.ndarray]):
         )
 
         self.action_space = spaces.Box(
-            low=np.array([-1, -1, -1, -1, 0, 0, 0, -1], dtype=np.float32),
-            high=np.array([1, 1, 1, 1, 1, 1, 1, 2], dtype=np.float32),
+            low=last_vector_core.Simulator.action_low(),
+            high=last_vector_core.Simulator.action_high(),
             dtype=np.float32,
         )
 

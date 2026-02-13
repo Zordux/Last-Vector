@@ -37,6 +37,34 @@ class CsvMetricsCallback(BaseCallback):
         self.last_accuracy = 0.0
         self.last_damage_dealt = 0.0
         self.last_damage_taken = 0.0
+        self._file_handle = None
+        self._csv_writer = None
+
+    def _on_training_start(self) -> None:
+        """Open CSV file and write header if needed."""
+        self._file_handle = self.path.open("a", encoding="utf-8", newline="")
+        fieldnames = [
+            "ts",
+            "timesteps",
+            "fps",
+            "ep_rew_mean",
+            "ep_len_mean",
+            "episodes_done",
+            "last_ep_reward",
+            "last_ep_len",
+            "last_ep_kills",
+            "kills",
+            "shots_fired",
+            "hits",
+            "accuracy",
+            "damage_dealt",
+            "damage_taken",
+        ]
+        self._csv_writer = csv.DictWriter(self._file_handle, fieldnames=fieldnames)
+        if not self._wrote_header:
+            self._csv_writer.writeheader()
+            self._file_handle.flush()
+            self._wrote_header = True
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", [])
@@ -71,13 +99,16 @@ class CsvMetricsCallback(BaseCallback):
             "damage_taken": float(self.last_damage_taken),
         }
 
-        with self.path.open("a", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(row.keys()))
-            if not self._wrote_header:
-                writer.writeheader()
-                self._wrote_header = True
-            writer.writerow(row)
+        self._csv_writer.writerow(row)
+        self._file_handle.flush()
         return True
+
+    def _on_training_end(self) -> None:
+        """Close CSV file handle."""
+        if self._file_handle is not None:
+            self._file_handle.close()
+            self._file_handle = None
+            self._csv_writer = None
 
 
 class StatusCallback(BaseCallback):

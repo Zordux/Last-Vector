@@ -10,6 +10,8 @@ from typing import Any
 import numpy as np
 from stable_baselines3 import PPO
 
+import last_vector_core
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Serve PPO inference actions over TCP.")
@@ -46,8 +48,8 @@ def clamp_and_validate_action(action: np.ndarray) -> list[float]:
     if arr.shape[0] != 8:
         raise ValueError(f"expected action dim 8, got {arr.shape[0]}")
 
-    low = np.array([-1, -1, -1, -1, 0, 0, 0, -1], dtype=np.float32)
-    high = np.array([1, 1, 1, 1, 1, 1, 1, 2], dtype=np.float32)
+    low = last_vector_core.Simulator.action_low()
+    high = last_vector_core.Simulator.action_high()
     arr = np.clip(arr, low, high)
     arr[4] = 1.0 if arr[4] > 0.5 else 0.0
     arr[5] = 1.0 if arr[5] > 0.5 else 0.0
