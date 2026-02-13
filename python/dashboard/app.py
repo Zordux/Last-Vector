@@ -37,11 +37,11 @@ def create_app(runs_dir: Path) -> FastAPI:
         )
 
     @app.get("/api/runs", response_class=JSONResponse)
-    async def api_runs() -> JSONResponse:
+    def api_runs() -> JSONResponse:
         return JSONResponse([store.run_summary(run_id) for run_id in store.list_runs()])
 
     @app.get("/api/hw", response_class=JSONResponse)
-    async def api_hw() -> JSONResponse:
+    def api_hw() -> JSONResponse:
         virtual_memory = psutil.virtual_memory()
         return JSONResponse(
             {

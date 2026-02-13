@@ -10,9 +10,6 @@
   // Chart.js instances
   const charts = {};
   let lastRefreshedTime = null;
-  let runsPollingInterval = null;
-  let hwPollingInterval = null;
-  let refreshCounterInterval = null;
 
   function showRunPanel(panelId) {
     runPanels.forEach((panel) => panel.classList.toggle('hidden', panel.id !== panelId));
@@ -61,6 +58,8 @@
       const theme = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
       root.setAttribute('data-theme', theme);
       window.localStorage.setItem('lv-theme', theme);
+      // Update chart colors after theme change (small delay to let CSS variables update)
+      setTimeout(updateChartTheme, 50);
     });
   }
 
@@ -69,18 +68,31 @@
     root.setAttribute('data-theme', savedTheme);
   }
 
+  // Get current theme colors from CSS variables
+  function getThemeColors() {
+    const styles = getComputedStyle(document.documentElement);
+    return {
+      text: styles.getPropertyValue('--text').trim(),
+      muted: styles.getPropertyValue('--muted').trim(),
+      border: styles.getPropertyValue('--border').trim(),
+    };
+  }
+
   // Initialize Chart.js for each run
   function initCharts() {
     const seriesScripts = document.querySelectorAll('[id^="series-data-"]');
+    const themeColors = getThemeColors();
+    
     seriesScripts.forEach((script) => {
       const index = script.id.replace('series-data-', '');
       const canvas = document.getElementById(`chart-${index}`);
       if (!canvas) return;
 
+      const runId = canvas.dataset.runId;
       const seriesData = JSON.parse(script.textContent);
       
       const ctx = canvas.getContext('2d');
-      charts[index] = new Chart(ctx, {
+      charts[runId] = new Chart(ctx, {
         type: 'line',
         data: {
           labels: seriesData.steps,
@@ -120,25 +132,25 @@
           plugins: {
             legend: {
               labels: {
-                color: '#e8eaf7',
+                color: themeColors.text,
               },
             },
           },
           scales: {
             x: {
               grid: {
-                color: '#2d2744',
+                color: themeColors.border,
               },
               ticks: {
-                color: '#9a9cbc',
+                color: themeColors.muted,
               },
             },
             y: {
               grid: {
-                color: '#2d2744',
+                color: themeColors.border,
               },
               ticks: {
-                color: '#9a9cbc',
+                color: themeColors.muted,
               },
             },
           },
@@ -148,8 +160,8 @@
   }
 
   // Update chart data
-  function updateChart(index, seriesData) {
-    const chart = charts[index];
+  function updateChart(runId, seriesData) {
+    const chart = charts[runId];
     if (!chart) return;
 
     chart.data.labels = seriesData.steps;
@@ -157,6 +169,20 @@
     chart.data.datasets[1].data = seriesData.episode_length;
     chart.data.datasets[2].data = seriesData.kills;
     chart.update();
+  }
+
+  // Update chart theme colors
+  function updateChartTheme() {
+    const themeColors = getThemeColors();
+    
+    Object.values(charts).forEach((chart) => {
+      chart.options.plugins.legend.labels.color = themeColors.text;
+      chart.options.scales.x.grid.color = themeColors.border;
+      chart.options.scales.x.ticks.color = themeColors.muted;
+      chart.options.scales.y.grid.color = themeColors.border;
+      chart.options.scales.y.ticks.color = themeColors.muted;
+      chart.update();
+    });
   }
 
   // Format number with specified decimal places
@@ -227,8 +253,8 @@
         });
 
         // Update chart if series data changed
-        if (run.series && charts[index]) {
-          updateChart(index, run.series);
+        if (run.series && charts[run.run_id]) {
+          updateChart(run.run_id, run.series);
         }
       });
     } catch (error) {
@@ -271,9 +297,9 @@
   }
 
   // Start polling loops
-  runsPollingInterval = setInterval(updateRuns, 5000);
-  hwPollingInterval = setInterval(updateHardware, 3000);
-  refreshCounterInterval = setInterval(updateRefreshCounter, 1000);
+  setInterval(updateRuns, 5000);
+  setInterval(updateHardware, 3000);
+  setInterval(updateRefreshCounter, 1000);
 
   // Do initial updates
   updateRuns();

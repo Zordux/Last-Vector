@@ -95,7 +95,7 @@
                 {% if run.series.steps|length == 0 %}
                   <p class="muted">No metrics.csv data available yet.</p>
                 {% else %}
-                  <canvas id="chart-{{ loop.index0 }}" height="200"></canvas>
+                  <canvas id="chart-{{ loop.index0 }}" data-run-id="{{ run.run_id }}" height="200"></canvas>
                   <script type="application/json" id="series-data-{{ loop.index0 }}">{{ run.series | tojson }}</script>
                   <div class="table-wrap">
                     <table class="mini-table">

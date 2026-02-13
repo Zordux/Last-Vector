@@ -32,9 +32,13 @@ class RunStore:
             with path.open("rb") as f:
                 f.seek(0, 2)
                 file_size = f.tell()
-                f.seek(max(0, file_size - 32768), 0)
+                seek_pos = max(0, file_size - 32768)
+                f.seek(seek_pos, 0)
                 chunk = f.read().decode("utf-8", errors="replace")
                 lines = chunk.splitlines()
+                # If we didn't read from the start, first line is likely partial — drop it
+                if seek_pos > 0 and lines:
+                    lines = lines[1:]
         except OSError:
             return []
         return lines[-limit:]
@@ -45,17 +49,23 @@ class RunStore:
         try:
             with metrics_path.open("rb") as f:
                 # Read header first
-                header_line = f.readline().decode("utf-8", errors="replace")
+                header_line = f.readline().decode("utf-8", errors="replace").rstrip("\n")
                 # Get file size and seek to tail
                 f.seek(0, 2)
                 file_size = f.tell()
-                f.seek(max(0, file_size - 32768), 0)
+                seek_pos = max(len(header_line.encode("utf-8")) + 1, file_size - 32768)
+                if seek_pos >= file_size:
+                    seek_pos = len(header_line.encode("utf-8")) + 1
+                f.seek(seek_pos, 0)
                 chunk = f.read().decode("utf-8", errors="replace")
                 lines = chunk.splitlines()
+                # If we seeked past the header, the first line is likely a partial line — drop it
+                if seek_pos > len(header_line.encode("utf-8")) + 1 and lines:
+                    lines = lines[1:]
                 # Take last 400 lines from chunk
                 tail_lines = lines[-400:]
                 # Prepend header so csv.DictReader works
-                csv_content = header_line.rstrip('\n') + "\n" + "\n".join(tail_lines)
+                csv_content = header_line + "\n" + "\n".join(tail_lines)
                 rows = list(csv.DictReader(csv_content.splitlines()))
         except (OSError, csv.Error):
             return []

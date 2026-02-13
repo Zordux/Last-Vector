@@ -316,7 +316,6 @@ def main() -> None:
     try:
         model.learn(total_timesteps=args.total_steps, callback=callbacks, progress_bar=True)
         model.save(run_dir / "final_model")
-        status_cb._write_status("completed")
     except Exception as exc:
         error_log.write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
         write_json(
