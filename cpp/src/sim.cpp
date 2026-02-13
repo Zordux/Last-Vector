@@ -312,7 +312,7 @@ void Simulator::handle_upgrade_choice(const Action& action) {
     
     if (!valid_choice) {
         upgrade_pause_ticks_ += 1;
-        if (upgrade_pause_ticks_ < 120) {
+        if (upgrade_pause_ticks_ < kUpgradeChoiceTimeoutTicks) {
             return;
         }
     }
