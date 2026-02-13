@@ -26,6 +26,7 @@ class Simulator {
   private:
     GameState state_{};
     DeterministicRng rng_{0};
+    int upgrade_pause_ticks_ = 0;
 
     void init_obstacles();
     void roll_upgrade_offer();

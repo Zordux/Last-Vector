@@ -4,7 +4,6 @@
 
 namespace lv {
 
-float clamp(float x, float lo, float hi);
 Vec2 closest_point_on_aabb(Vec2 point, const Obstacle& box);
 bool circle_vs_aabb_resolve(Vec2& center, float radius, const Obstacle& box);
 bool circle_vs_aabb_overlap(Vec2 center, float radius, const Obstacle& box);
